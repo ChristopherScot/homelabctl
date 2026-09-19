@@ -33,13 +33,8 @@ jobs:
 {{ .BuildSteps }}
       # One binary for both checks below. Downloaded rather than built so
       # CI does not depend on this repo being able to compile it.
-      # NOTE: still ChristopherScot/ci-scripts, deliberately. homelabctl
-      # moved to its own repo, but this URL must keep serving a working
-      # binary for every service already scaffolded from this template.
-      # Repoint it only after ChristopherScot/homelabctl has published a
-      # release - until then the new repo's /releases/latest 404s.
       - name: Install homelabctl
-        run: curl -fsSL https://github.com/ChristopherScot/ci-scripts/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
+        run: curl -fsSL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
 
       # openapi.yml is the source of truth, so everything derived from it
       # - the server interface, both clients, the versions they report -

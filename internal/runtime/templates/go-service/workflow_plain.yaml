@@ -42,13 +42,8 @@ jobs:
 {{ .BuildSteps }}
       # Downloaded rather than built so CI does not depend on this repo
       # being able to compile it.
-      # NOTE: still ChristopherScot/ci-scripts, deliberately. homelabctl
-      # moved to its own repo, but this URL must keep serving a working
-      # binary for every service already scaffolded from this template.
-      # Repoint it only after ChristopherScot/homelabctl has published a
-      # release - until then the new repo's /releases/latest 404s.
       - name: Install homelabctl
-        run: curl -fsSL https://github.com/ChristopherScot/ci-scripts/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
+        run: curl -fsSL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
 
       - name: Check deploy manifests
         run: ./homelabctl check deploy

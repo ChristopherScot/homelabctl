@@ -80,21 +80,17 @@ You do not touch the cluster directly at any point.
 
 Download the binary for your machine and put it somewhere on your `PATH`:
 
-<!-- These still point at ci-scripts on purpose: that is where the
-     published releases are. Switch to ChristopherScot/homelabctl once
-     this repo has cut its first release. -->
-
 ```sh
 # macOS, Apple Silicon
-curl -sL https://github.com/ChristopherScot/ci-scripts/releases/latest/download/homelabctl_darwin_arm64.tar.gz | tar xz
+curl -sL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_darwin_arm64.tar.gz | tar xz
 mv homelabctl ~/bin/
 
 # macOS, Intel
-curl -sL https://github.com/ChristopherScot/ci-scripts/releases/latest/download/homelabctl_darwin_amd64.tar.gz | tar xz
+curl -sL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_darwin_amd64.tar.gz | tar xz
 mv homelabctl ~/bin/
 
 # Linux
-curl -sL https://github.com/ChristopherScot/ci-scripts/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar xz
+curl -sL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar xz
 mv homelabctl ~/bin/
 ```
 
