@@ -2,6 +2,10 @@
 
 Owned by {{ .Team }}.
 
+## Usage
+
+TODO — what this API is for, and who calls it.
+
 ## The spec is the source of truth
 
 `openapi.yml` describes this API. Everything else is generated from it:
@@ -45,13 +49,25 @@ a replacement has to keep.
 purpose: a consumer imports that package, and getting the protocol client
 without the defaults would be worse than useless.
 
-## Working on it
+## Build
 
 ```sh
-go test ./...                    # server, client and paging
-go run .                         # PORT={{ .Port }} by default
+make build                       # compile
+make run                         # PORT={{ .Port }} by default
 wgo run .                        # the same, restarted on every save
 homelabctl regen                 # after editing openapi.yml
+```
+
+## Testing
+
+```sh
+make test                        # go vet and go test -race. What CI runs.
+```
+
+Add a service's own setup — a database, a seed step, extra env — to
+`Makefile.local`. It is not generated, so it survives a regenerate.
+
+```sh
 homelabctl check deploy          # deploy manifests and spec problems
 homelabctl diff                  # what would change in the GitOps repo
 ```
@@ -111,7 +127,7 @@ traffic to a dependency that is already struggling. Pass
 `api.ExponentialRetry{}` or `api.NoRetry{}`, and a `Breaker`, when a
 specific call wants something else.
 
-## Deploying
+## Deploy
 
 Push to main. CI builds the image; argocd-image-updater sees the new digest
 and commits it to the homelab repo; ArgoCD syncs it. No homelab credential

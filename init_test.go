@@ -593,3 +593,49 @@ func TestScaffoldTestsCanBeOverwritten(t *testing.T) {
 			"cannot reach a service that already exists")
 	}
 }
+
+// --runtime carries a default that is correct for a new service and
+// wrong for every re-run on an existing one. A node-service asked to
+// rewrite one file used to get the go-service template - silently,
+// because the flag was simply holding its default - so `--overwrite
+// Makefile` replaced an npm Makefile with a go one.
+func TestARerunKeepsTheRuntimeFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	o := initOpts{
+		name: "svc", owner: "o", runtimeID: "node-service",
+		noSpec: true, localOnly: true, yes: true,
+	}
+	if err := runInit(o); err != nil {
+		t.Fatal(err)
+	}
+	first, err := os.ReadFile("Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(first), "npm") {
+		t.Fatalf("a node-service Makefile should drive npm:\n%s", first)
+	}
+
+	// The same command a maintainer runs to pick up a template change,
+	// without repeating --runtime. The default is go-service.
+	again := o
+	again.runtimeID = "go-service"
+	again.overwrite = map[string]bool{"Makefile": true}
+	if err := runInit(again); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := os.ReadFile("Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(after), "go build") {
+		t.Errorf("the re-run used the flag's default runtime and rewrote a "+
+			"node service with the go template:\n%s", after)
+	}
+	if !strings.Contains(string(after), "npm") {
+		t.Errorf("Makefile is no longer a node-service one:\n%s", after)
+	}
+}

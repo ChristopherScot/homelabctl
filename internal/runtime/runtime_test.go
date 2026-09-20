@@ -1935,3 +1935,46 @@ func TestEveryRuntimeShipsAMakefile(t *testing.T) {
 		})
 	}
 }
+
+// Every runtime ships a README with the same four headings, in the same
+// order, so a reader landing in an unfamiliar service knows where to
+// look. Usage comes first and is a TODO on purpose: the scaffold cannot
+// know what the thing is for, and an empty heading is a visible prompt
+// to say so, where a missing one is not.
+func TestEveryRuntimeShipsAReadme(t *testing.T) {
+	for _, name := range Names() {
+		t.Run(name, func(t *testing.T) {
+			r, err := Get(name)
+			if err != nil {
+				t.Fatalf("Get(%q) = %v", name, err)
+			}
+
+			var body string
+			for _, f := range r.Artifacts(testParams()).Files {
+				if f.Path == "README.md" {
+					body = f.Body
+				}
+			}
+			if body == "" {
+				t.Fatal("no README.md")
+			}
+
+			at := -1
+			for _, want := range []string{"## Usage", "## Build", "## Testing", "## Deploy"} {
+				i := strings.Index(body, want)
+				if i < 0 {
+					t.Errorf("no %q heading", want)
+					continue
+				}
+				if i < at {
+					t.Errorf("%q is out of order", want)
+				}
+				at = i
+			}
+
+			if !strings.Contains(body, "TODO") {
+				t.Error("Usage should be a TODO: the scaffold cannot know what this is for")
+			}
+		})
+	}
+}

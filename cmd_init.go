@@ -115,6 +115,14 @@ func initCmd() *cobra.Command {
 }
 
 func runInit(o initOpts) error {
+	// An existing config.yaml decides the runtime, because --runtime
+	// carries a default that is right for a NEW service and wrong for
+	// every re-run on an existing one. `--overwrite Makefile` in a
+	// node-service used to rewrite it from the go-service template
+	// without a word, since the flag simply held its default.
+	if existing, err := config.Load(configName); err == nil && existing.Runtime != "" {
+		o.runtimeID = existing.Runtime
+	}
 
 	r, err := runtime.Get(o.runtimeID)
 	if err != nil {

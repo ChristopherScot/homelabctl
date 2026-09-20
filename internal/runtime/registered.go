@@ -81,6 +81,7 @@ func init() {
 			"VERSION.tmpl":          {dst: "VERSION"},
 			"gitignore.tmpl":        {dst: ".gitignore"},
 			"Makefile.tmpl":         {dst: "Makefile"},
+			"README.md.tmpl":        {dst: "README.md"},
 		},
 	})
 
@@ -104,6 +105,7 @@ func init() {
 			"VERSION.tmpl":          {dst: "VERSION"},
 			"gitignore.tmpl":        {dst: ".gitignore"},
 			"Makefile.tmpl":         {dst: "Makefile"},
+			"README.md.tmpl":        {dst: "README.md"},
 		},
 	})
 
@@ -126,6 +128,7 @@ func init() {
 			"VERSION.tmpl":          {dst: "VERSION"},
 			"gitignore.tmpl":        {dst: ".gitignore"},
 			"Makefile.tmpl":         {dst: "Makefile"},
+			"README.md.tmpl":        {dst: "README.md"},
 		},
 	})
 
@@ -144,6 +147,7 @@ func init() {
 			"server.test.ts.tmpl": {dst: "server.test.ts"},
 			"gitignore":           {dst: ".gitignore"},
 			"Makefile.tmpl":       {dst: "Makefile"},
+			"README.md.tmpl":      {dst: "README.md"},
 			// Dockerfile.dockerignore, not .dockerignore: this runtime
 			// builds from the REPOSITORY root so a sibling client is in
 			// scope, and Docker reads a plain .dockerignore only from

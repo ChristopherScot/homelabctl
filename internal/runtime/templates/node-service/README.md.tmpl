@@ -1,0 +1,46 @@
+# {{ .Name }}
+
+Owned by {{ .Team }}.
+
+## Usage
+
+TODO — what this service is for, and what it serves.
+
+## Build
+
+```sh
+make build            # the production bundle, dist/server.js
+make run              # start it on :{{ .Port }}
+make run-dist         # the bundle, from an empty directory
+```
+
+`make run` uses `npm start`, which passes flags the server needs; running
+`node server.ts` directly fails in ways that look like a code problem.
+
+`make run-dist` is the one worth knowing about. The image copies
+`dist/server.js` and nothing else — no `node_modules`, no source — so
+anything read from disk at runtime resolves in a repo checkout and 500s
+in the container. This reproduces the image's layout locally.
+
+## Testing
+
+```sh
+make test             # typecheck, then the tests. What CI runs.
+```
+
+Add a service's own setup — a database, a seed step, extra env — to
+`Makefile.local`. It is not generated, so it survives a regenerate.
+
+## Deploy
+
+CI builds and pushes an image on every push to `main`;
+argocd-image-updater rolls it out. Nothing to run by hand.
+
+```sh
+homelabctl check deploy   # manifests and config
+homelabctl status         # what Argo made of it
+homelabctl diff           # what would change in the GitOps repo
+```
+
+Manifests are generated from `config.yaml` by `homelabctl render` —
+change the config, not `deploy/`.
