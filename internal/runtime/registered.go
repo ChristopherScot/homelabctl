@@ -151,8 +151,11 @@ func init() {
 			"server.ts.tmpl":      {dst: "server.ts"},
 			"server.test.ts.tmpl": {dst: "server.test.ts"},
 			"gitignore":           {dst: ".gitignore"},
-			"Makefile.tmpl":       {dst: "Makefile"},
-			"README.md.tmpl":      {dst: "README.md"},
+			// engine-strict, so an install under the wrong node fails
+			// instead of quietly rewriting package-lock.json.
+			"npmrc":          {dst: ".npmrc"},
+			"Makefile.tmpl":  {dst: "Makefile"},
+			"README.md.tmpl": {dst: "README.md"},
 			// Dockerfile.dockerignore, not .dockerignore: this runtime
 			// builds from the REPOSITORY root so a sibling client is in
 			// scope, and Docker reads a plain .dockerignore only from

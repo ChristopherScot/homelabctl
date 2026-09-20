@@ -1,5 +1,6 @@
-v1.18.19
+v1.18.20
 
+v1.18.20 node services declare the node they need, and enforce it
 v1.18.19 monorepo releases get per-service tag prefixes
 v1.18.18 CI runs `make build` too, and go-mobile decides what building means
 v1.18.17 every runtime gets `make regen`
