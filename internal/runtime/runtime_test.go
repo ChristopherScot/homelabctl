@@ -2019,3 +2019,42 @@ func TestCIRunsMakeTest(t *testing.T) {
 		})
 	}
 }
+
+// `make build` has to leave something behind.
+//
+// `go build ./...` compiles every package and discards the result, so
+// the target printed a command, exited 0, and produced no binary -
+// `./name` was "no such file or directory" straight after a successful
+// build. Naming the package and passing -o is what writes it, and it
+// has to be the same path `make clean` removes.
+func TestMakeBuildProducesABinary(t *testing.T) {
+	for _, name := range Names() {
+		t.Run(name, func(t *testing.T) {
+			r, err := Get(name)
+			if err != nil {
+				t.Fatalf("Get(%q) = %v", name, err)
+			}
+			var mk string
+			for _, f := range r.Artifacts(testParams()).Files {
+				if f.Path == "Makefile" {
+					mk = f.Body
+				}
+			}
+			if mk == "" {
+				t.Fatal("no Makefile")
+			}
+			// node-service builds a bundle with its own tooling.
+			if strings.Contains(mk, "npm run build") {
+				return
+			}
+			// The recipe line, not the comment that explains it - the
+			// comment says `go build ./...` on purpose.
+			if strings.Contains(mk, "\tgo build ./...") {
+				t.Error("`go build ./...` discards the binary; name the package and pass -o")
+			}
+			if !strings.Contains(mk, "go build -o") {
+				t.Error("build does not write a binary anywhere")
+			}
+		})
+	}
+}
