@@ -180,16 +180,30 @@ this service's `node_modules`. Without it the build fails with "Cannot
 find package 'openapi-fetch'" naming a file in the OTHER service's
 directory.
 
-**Set `resolve.preserveSymlinks: true`** in every vite config - the SSR
-one and the browser one. The bundler otherwise resolves the client's
-imports from the symlink's real path, walks up from
+**Preserve symlinks in every resolver.** `resolve.preserveSymlinks: true`
+in each vite config - the SSR one and the browser one - AND
+`--preserve-symlinks` on any `node` script that runs TypeScript directly,
+such as `start` and `dev:fast`.
+
+Resolution otherwise follows the symlink to its real path, walks up from
 `../thatservice/clients/ts/` looking for `node_modules`, finds none, and
-fails. Node's runtime resolver follows the link back; the bundler does
-not. Tests can pass while the container build fails on exactly this.
+fails. Node realpaths by default; the flag is what turns that off.
+
+Both halves fail silently in CI. Miss the vite side and the tests pass
+while the container build fails. Miss the node side and the tests still
+pass - vitest resolves through vite - while `npm start` is broken for
+anyone running it locally.
 
 The Dockerfile already supports it: the build context is the REPOSITORY
 root, so the sibling directory is visible, and vite inlines the client
 into the bundle, so no symlink reaches the running image.
+
+Two more things worth knowing. The consumer's workflow needs the API
+service in its `paths:` filter, or a spec change skips the job that
+would have caught it - and `vite build` does not typecheck, so the
+typecheck job is the only thing that catches a renamed field. And
+`vite build --watch` does not see edits made through the symlink, so
+restart the dev server after a regen.
 
 That `openapi-fetch` line generalises: every dependency the client
 declares has to be declared here too, for the same reason. The generated
