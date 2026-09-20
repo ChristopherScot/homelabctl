@@ -33,15 +33,18 @@ type initOpts struct {
 	// runtimeID picks the template set. Not derivable from a config that
 	// does not exist yet, and it decides which files are written, so it
 	// stays a flag - but `runtime:` in config.yaml wins on a re-run.
-	runtimeID  string
-	owner      string
-	parentRepo string // create the service inside this existing repo
-	private    bool
-	noSpec     bool // hand-write server.go rather than generate from a spec
-	localOnly  bool
-	remoteOnly bool
-	dryRun     bool
-	yes        bool
+	runtimeID string
+	// runtimeGiven records that --runtime was typed. Without it, a
+	// re-run cannot tell "make me a go-service" from "you did not say".
+	runtimeGiven bool
+	owner        string
+	parentRepo   string // create the service inside this existing repo
+	private      bool
+	noSpec       bool // hand-write server.go rather than generate from a spec
+	localOnly    bool
+	remoteOnly   bool
+	dryRun       bool
+	yes          bool
 	// overwrite names scaffolded files to rewrite from the current
 	// templates even though they exist. Keyed on the cleaned path, the
 	// same form put looks up.
@@ -62,8 +65,13 @@ func initCmd() *cobra.Command {
 			"an existing one. Every step skips what already exists, so a run that\n" +
 			"fails partway can simply be run again.",
 		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			o.name = args[0]
+			// Whether --runtime was TYPED, not just what it holds. A
+			// re-run on an existing service must not scaffold a
+			// different runtime because the flag was sitting on its
+			// default.
+			o.runtimeGiven = cmd.Flags().Changed("runtime")
 			// Cleaned to the same form put looks up. Storing the raw
 			// string meant `--force ./main.go` passed validation and
 			// then silently matched nothing.
@@ -115,13 +123,21 @@ func initCmd() *cobra.Command {
 }
 
 func runInit(o initOpts) error {
-	// An existing config.yaml decides the runtime, because --runtime
-	// carries a default that is right for a NEW service and wrong for
-	// every re-run on an existing one. `--overwrite Makefile` in a
-	// node-service used to rewrite it from the go-service template
-	// without a word, since the flag simply held its default.
-	if existing, err := config.Load(configName); err == nil && existing.Runtime != "" {
-		o.runtimeID = existing.Runtime
+	// Which runtime this service ALREADY is, when it already is one.
+	//
+	// --runtime carries a default that is right for a new service and
+	// wrong for every re-run on an existing one. `--overwrite Makefile`
+	// in a node-service used to rewrite it from the go-service template
+	// without a word, and in a go-cli - which has no config.yaml at all
+	// - it wrote a whole go-service on top: api/, clients/, deploy/, a
+	// Dockerfile, an openapi.yml and a server.go, none of which belong.
+	if !o.runtimeGiven {
+		switch known, err := existingRuntime(); {
+		case err != nil:
+			return err
+		case known != "":
+			o.runtimeID = known
+		}
 	}
 
 	r, err := runtime.Get(o.runtimeID)
@@ -1137,4 +1153,49 @@ func minus(c *config.Config, def config.Config) *config.Config {
 		out.Resources = nil
 	}
 	return &out
+}
+
+// existingRuntime reports which runtime this directory already holds,
+// or "" if it holds no service yet.
+//
+// config.yaml answers it outright, but only a deployable runtime writes
+// one: a go-cli, go-tui or go-mobile has nothing on disk that says what
+// it is. So those are recognised by the file each one scaffolds and the
+// others do not. The marker is a file the runtime OWNS, not one a
+// service might add - model.go is go-tui's bubbletea model, state.go is
+// go-mobile's, and update.go is the self-updater that only a released
+// binary gets.
+//
+// An error, not a guess, when the directory holds a service that cannot
+// be identified: writing the wrong runtime over it scaffolds a second
+// service on top of the first, which is how `--overwrite Makefile` once
+// added api/, clients/, deploy/, a Dockerfile and a server.go to a CLI.
+func existingRuntime() (string, error) {
+	if c, err := config.Load(configName); err == nil && c.Runtime != "" {
+		return c.Runtime, nil
+	}
+
+	// Ordered: go-tui also ships update.go, so its own marker is tested
+	// before the one it shares with go-cli.
+	for _, m := range []struct{ file, runtime string }{
+		{"model.go", "go-tui"},
+		{"state.go", "go-mobile"},
+		{"update.go", "go-cli"},
+		{"package.json", "node-service"},
+	} {
+		if _, err := os.Stat(m.file); err == nil {
+			return m.runtime, nil
+		}
+	}
+
+	// A go.mod with no marker and no config.yaml is a service this does
+	// not recognise. Saying so beats scaffolding a go-service over it.
+	if _, err := os.Stat("go.mod"); err == nil {
+		return "", fmt.Errorf(
+			"this directory already holds a service, but nothing here says which runtime.\n"+
+				"Pass --runtime explicitly (one of %s) if you are sure.",
+			strings.Join(runtime.Names(), ", "))
+	}
+
+	return "", nil
 }

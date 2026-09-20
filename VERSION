@@ -1,5 +1,6 @@
-v1.18.11
+v1.18.12
 
+v1.18.12 a re-run keeps the runtime it found, or asks; it never guesses
 v1.18.11 every runtime ships a README, and a re-run keeps its own runtime
 v1.18.10 every runtime ships a Makefile: same verbs in every service
 v1.18.9 go-mobile: JDK 17, because modern d8 cannot be loaded by JDK 8

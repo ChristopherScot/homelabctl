@@ -594,11 +594,76 @@ func TestScaffoldTestsCanBeOverwritten(t *testing.T) {
 	}
 }
 
-// --runtime carries a default that is correct for a new service and
-// wrong for every re-run on an existing one. A node-service asked to
-// rewrite one file used to get the go-service template - silently,
-// because the flag was simply holding its default - so `--overwrite
-// Makefile` replaced an npm Makefile with a go one.
+// A re-run must not change what the service IS.
+//
+// --runtime carries a default that is right for a new service and wrong
+// for every re-run, and nothing read back what was already there. In a
+// node-service `--overwrite Makefile` replaced an npm Makefile with a
+// go one; in a go-cli - which writes no config.yaml, so nothing on disk
+// said what it was - it scaffolded an entire second service on top:
+// api/, clients/, deploy/, Dockerfile, openapi.yml, server.go.
+func TestARerunDoesNotChangeTheRuntime(t *testing.T) {
+	for _, tc := range []struct{ runtime, keeps string }{
+		{"node-service", "npm"},
+		{"go-cli", "ARGS"},
+		{"go-tui", "ARGS"},
+		{"go-mobile", "apk"},
+	} {
+		t.Run(tc.runtime, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+
+			o := initOpts{
+				name: "svc", owner: "o", runtimeID: tc.runtime, runtimeGiven: true,
+				noSpec: true, localOnly: true, yes: true,
+			}
+			if err := runInit(o); err != nil {
+				t.Fatal(err)
+			}
+			before := ls(t, dir)
+
+			// The command a maintainer runs to pick up a template
+			// change. No --runtime, so the flag holds its default.
+			again := o
+			again.runtimeID, again.runtimeGiven = "go-service", false
+			again.overwrite = map[string]bool{"Makefile": true}
+			if err := runInit(again); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, unwanted := range []string{"openapi.yml", "server.go", "Dockerfile", "api", "deploy"} {
+				if !before[unwanted] {
+					if _, err := os.Stat(filepath.Join(dir, unwanted)); err == nil {
+						t.Errorf("the re-run scaffolded a go-service on top: %s appeared", unwanted)
+					}
+				}
+			}
+
+			body, err := os.ReadFile("Makefile")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(body), tc.keeps) {
+				t.Errorf("Makefile is no longer a %s one (wanted %q):\n%s",
+					tc.runtime, tc.keeps, body)
+			}
+		})
+	}
+}
+
+func ls(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]bool{}
+	for _, e := range entries {
+		out[e.Name()] = true
+	}
+	return out
+}
+
 func TestARerunKeepsTheRuntimeFromConfig(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
