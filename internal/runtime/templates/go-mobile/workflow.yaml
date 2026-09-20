@@ -92,89 +92,27 @@ jobs:
         id: v
         run: echo "version=$(head -n1 {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION)" >> $GITHUB_OUTPUT
 
-      - name: Install gogio
-        if: steps.gate.outputs.go == 'true'
-        run: go install gioui.org/cmd/gogio@latest
-
-      # gogio signs the APK itself. Given no keystore it generates a
-      # debug one and signs with that, which is enough for a phone to
-      # install after allowing unknown sources - no Play Console, no
-      # certificate to obtain.
+      # One command, the same one a person runs. The APK needs a
+      # four-part version, a repack because gogio compresses the native
+      # libraries, and a re-sign after that - all of which live in the
+      # Makefile, so a break shows up locally rather than only on main.
       #
-      # The cost of a debug key: Android identifies an app by the pair
-      # (app id, signing key), and CI generates a fresh key each run.
-      # So an upgrade over a previous install is REFUSED, and the fix
-      # is to uninstall first. A real keystore held in Vault removes
-      # that, and is the upgrade path when this stops being a toy.
+      # A debug key is enough for a phone to install after allowing
+      # unknown sources - no Play Console, no certificate. The cost:
+      # Android identifies an app by (app id, signing key) and CI
+      # generates a fresh key each run, so upgrading over a previous
+      # install is REFUSED and you uninstall first. A keystore in Vault
+      # is the upgrade path when this stops being a toy.
       #
-      # gogio wants major.minor.patch.versioncode - FOUR components,
-      # not three. The fourth is Android's integer versionCode, which
-      # must increase on every release or a phone refuses the upgrade as
-      # a downgrade. github.run_number is used for it because it only
-      # ever goes up; deriving it from VERSION would mean encoding a
-      # fourth number by hand and never being allowed to get it wrong.
+      # VERSION_CODE is Android's integer versionCode, which must
+      # increase on every release or a phone refuses the upgrade as a
+      # downgrade. github.run_number only ever goes up; deriving it from
+      # VERSION would mean encoding a fourth number by hand and never
+      # being allowed to get it wrong.
       - name: Build the APK
         if: steps.gate.outputs.go == 'true'
         working-directory: {{ if .PathFilter }}{{ .PathFilter }}{{ else }}.{{ end }}
-        run: |
-          set -eu
-          VERSION="${{ "{{" }} steps.v.outputs.version {{ "}}" }}"
-          gogio \
-            -target android \
-            -appid {{ .AppID }} \
-            -name '{{ .Title }}' \
-            -version "${VERSION#v}.${{ "{{" }} github.run_number {{ "}}" }}" \
-            -minsdk 31 \
-            -ldflags "-X main.version=$VERSION" \
-            -o {{ .Name }}.raw.apk \
-            .
-
-      # Repackage so a modern phone will install it, then re-sign.
-      #
-      # gogio writes every zip entry with Deflate and finishes with
-      # `zipalign 4`. Android mmaps native libraries straight out of
-      # the APK, so they must be STORED, and Android 15 wants them on
-      # a 16 KB page boundary. Compressed libs install nowhere: the
-      # installer churns and then says only "app not installed".
-      #
-      # `zipalign -p` is NOT enough on its own - it aligns entries
-      # that are already uncompressed and silently leaves compressed
-      # ones alone. The entry has to be rewritten.
-      #
-      # Signing comes after, because rewriting the zip invalidates
-      # whatever signature gogio produced.
-      - name: Make the APK installable
-        if: steps.gate.outputs.go == 'true'{{ if .PathFilter }}
-        working-directory: {{ .PathFilter }}{{ end }}
-        run: |
-          set -eu
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-
-          python3 repack_apk.py {{ .Name }}.raw.apk {{ .Name }}.aligned.apk
-
-          KS="$HOME/.android/debug.keystore"
-          if [ ! -f "$KS" ]; then
-            mkdir -p "$HOME/.android"
-            keytool -genkeypair -keystore "$KS" -storepass android \
-              -keypass android -alias androiddebugkey -keyalg RSA \
-              -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
-
-          "$BT/apksigner" sign \
-            --ks "$KS" --ks-pass pass:android --key-pass pass:android \
-            --ks-key-alias androiddebugkey \
-            --v1-signing-enabled true --v2-signing-enabled true \
-            --v3-signing-enabled true \
-            --out {{ .Name }}.apk {{ .Name }}.aligned.apk
-
-          rm -f {{ .Name }}.raw.apk {{ .Name }}.aligned.apk
-
-      # Fails the build rather than publishing an APK a phone refuses.
-      - name: Check the APK will install
-        if: steps.gate.outputs.go == 'true'{{ if .PathFilter }}
-        working-directory: {{ .PathFilter }}{{ end }}
-        run: python3 check_apk.py {{ .Name }}.apk
+        run: make build TARGET=apk VERSION_CODE=${{ "{{" }} github.run_number {{ "}}" }}
 
       - name: Checksums
         if: steps.gate.outputs.go == 'true'{{ if .PathFilter }}

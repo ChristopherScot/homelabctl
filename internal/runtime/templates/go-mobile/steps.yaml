@@ -21,3 +21,6 @@
       # whichever nobody is looking at.
       - name: Test
         run: make test
+
+      - name: Build
+        run: make build
