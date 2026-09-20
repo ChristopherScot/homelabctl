@@ -4,4 +4,15 @@ package main
 // CI runs the same command and fails if the result differs from what is
 // committed, so a spec change cannot ship without the code that matches.
 //
-//go:generate go run github.com/ogen-go/ogen/cmd/ogen@latest --config ogen.yml --target api --clean --package api openapi.yml
+// Add every generator this service uses here, not just ogen. CI's check
+// is `homelabctl regen` followed by a diff, and regen runs exactly this
+// - so a generator missing from this file is one CI cannot tell is
+// stale.
+//
+// The version is pinned rather than @latest. "Regenerate, then diff"
+// only means something if the same input gives the same output; with
+// @latest the build breaks on the day ogen publishes, in a file nobody
+// touched, and the error says the committed code is stale when it is
+// not. Bump this deliberately.
+//
+//go:generate go run github.com/ogen-go/ogen/cmd/ogen@v1.24.0 --config ogen.yml --target api --clean --package api openapi.yml
