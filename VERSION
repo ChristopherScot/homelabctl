@@ -1,5 +1,6 @@
-v0.0.3
+v1.18.5
 
+v1.18.5 continues ci-scripts' version line, so `update` can migrate onto it
 v0.0.3 scaffolded services download homelabctl from its own repo
 v0.0.2 first release from homelabctl's own repo
 v0.0.1 Initial release
