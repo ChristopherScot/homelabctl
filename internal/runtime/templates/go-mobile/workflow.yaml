@@ -108,7 +108,12 @@ jobs:
       # is to uninstall first. A real keystore held in Vault removes
       # that, and is the upgrade path when this stops being a toy.
       #
-      # gogio strips the leading v from the version: it wants semver.
+      # gogio wants major.minor.patch.versioncode - FOUR components,
+      # not three. The fourth is Android's integer versionCode, which
+      # must increase on every release or a phone refuses the upgrade as
+      # a downgrade. github.run_number is used for it because it only
+      # ever goes up; deriving it from VERSION would mean encoding a
+      # fourth number by hand and never being allowed to get it wrong.
       - name: Build the APK
         if: steps.gate.outputs.go == 'true'
         working-directory: {{ if .PathFilter }}{{ .PathFilter }}{{ else }}.{{ end }}
@@ -119,7 +124,7 @@ jobs:
             -target android \
             -appid {{ .AppID }} \
             -name '{{ .Title }}' \
-            -version "${VERSION#v}" \
+            -version "${VERSION#v}.${{ "{{" }} github.run_number {{ "}}" }}" \
             -minsdk 31 \
             -ldflags "-X main.version=$VERSION" \
             -o {{ .Name }}.apk \
