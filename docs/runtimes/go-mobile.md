@@ -157,18 +157,19 @@ Fixing this properly means generating a signing key once, keeping it
 somewhere safe, and giving it to CI — worth doing when the app has real
 users, and not worth it before then.
 
-### The build needs two JDKs
+### Use JDK 17, not the 8 Gio's docs ask for
 
-CI installs JDK 17, fetches the Android SDK, then drops to JDK 8 for
-`gogio`. That is not belt-and-braces - the two tools genuinely disagree:
+[Gio's install guide](https://gioui.org/doc/install/android) says to use
+OpenJDK 1.8 and that newer Java breaks the build. That advice is stale,
+and following it fails twice over:
 
-- `sdkmanager` refuses anything below 17
-- `gogio`'s `d8` step is stuck on 8, and Gio's install guide says newer
-  Java "will break the build"
+- `sdkmanager` refuses to run on anything below 17
+- modern `build-tools` ship a `d8` compiled for class file 55, which a
+  JDK 8 runtime cannot load at all
 
-Installing 8 first fails, because fetching the SDK is what runs
-`sdkmanager`. The generated workflow already has the right order; it is
-worth knowing before editing that section.
+And the reason 8 was ever needed no longer applies: `gogio` invokes
+`javac` with an explicit `-source 1.8 -target 1.8`, so the bytecode is
+Java 8 whichever JDK compiles it.
 
 ### The version has four parts, not three
 
