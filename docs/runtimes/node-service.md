@@ -191,6 +191,18 @@ The Dockerfile already supports it: the build context is the REPOSITORY
 root, so the sibling directory is visible, and vite inlines the client
 into the bundle, so no symlink reaches the running image.
 
+That `openapi-fetch` line generalises: every dependency the client
+declares has to be declared here too, for the same reason. The generated
+client has had one for its whole life, and if a second appears the build
+fails naming it -
+
+```
+[vite]: Rollup failed to resolve import "x" from ".../clients/ts/index.js"
+```
+
+- so it is a rare, loud failure with a one-line fix, not something that
+ships broken.
+
 ## Deploying
 
 Covered in the [main guide](../../README.md#quickstart-your-first-service).
