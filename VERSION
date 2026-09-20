@@ -1,5 +1,6 @@
-v1.18.18
+v1.18.19
 
+v1.18.19 monorepo releases get per-service tag prefixes
 v1.18.18 CI runs `make build` too, and go-mobile decides what building means
 v1.18.17 every runtime gets `make regen`
 v1.18.16 go-service pins ogen, so "regenerate and diff" means something

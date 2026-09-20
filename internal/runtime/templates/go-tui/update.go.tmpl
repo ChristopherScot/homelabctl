@@ -24,14 +24,36 @@ const (
 	// release is per repository, so naming the service here asks
 	// api.github.com for a repository that does not exist.
 	repoName = "{{ .RepoName }}"
-
+{{ if .PathFilter }}
+	// Releases are per REPOSITORY, and a monorepo holds several
+	// services that each cut their own. Without a prefix they share one
+	// tag namespace: `latest` is then whichever service released most
+	// recently, and two services reaching the same version number
+	// attach their assets to ONE release, where the second
+	// checksums.txt overwrites the first.
+	//
+	// So a tag here is "{{ .Name }}/v1.2.3", and this binary considers
+	// only the releases carrying that prefix.
+	tagPrefix = "{{ .Name }}/"
+{{ else }}
+	// A dedicated repo has one release line, so tags are bare: v1.2.3.
+	tagPrefix = ""
+{{ end }}
 	// A {{ .Name }} binary is a few MB; anything near this is not our asset.
 	maxBinarySize = 100 * 1024 * 1024
 )
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
-	Assets  []struct {
+
+	// /releases returns drafts and prereleases, unlike
+	// /releases/latest which filters them out. Walking the list
+	// ourselves means filtering them ourselves, or `update` offers to
+	// install something not yet released.
+	Draft      bool `json:"draft"`
+	Prerelease bool `json:"prerelease"`
+
+	Assets []struct {
 		Name               string `json:"name"`
 		BrowserDownloadURL string `json:"browser_download_url"`
 	} `json:"assets"`
@@ -70,18 +92,18 @@ func runUpdate(checkOnly bool) error {
 	if err != nil {
 		return fmt.Errorf("check for updates: %w", err)
 	}
-	latest := ensureV(rel.TagName)
+	latest := releaseVersion(rel.TagName)
 	if !isNewer(latest, current) {
 		fmt.Println("already up to date")
 		return nil
 	}
-	fmt.Printf("new version available: %s\n", rel.TagName)
+	fmt.Printf("new version available: %s\n", latest)
 	if checkOnly {
 		fmt.Println("run '{{ .Name }} update' to install it")
 		return nil
 	}
 
-	want := fmt.Sprintf("{{ .Name }}_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	want := assetName()
 	var url string
 	for _, a := range rel.Assets {
 		if a.Name == want {
@@ -99,8 +121,17 @@ func runUpdate(checkOnly bool) error {
 	return nil
 }
 
+// latestRelease is the newest release belonging to THIS tool.
+//
+// Not /releases/latest: that endpoint answers "the newest release in
+// this repository", which in a monorepo is whichever sibling released
+// most recently. Asking it here meant a tool offering to install an
+// APK, and failing with "no asset for darwin/arm64" - a message that
+// blames the release rather than the question.
+//
+// Releases come back newest-first, so the first match wins.
 func latestRelease() (*githubRelease, error) {
-	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName))
+	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", repoOwner, repoName))
 	if err != nil {
 		return nil, err
 	}
@@ -108,11 +139,61 @@ func latestRelease() (*githubRelease, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("github api returned %s", resp.Status)
 	}
-	var rel githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+	var rels []githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&rels); err != nil {
 		return nil, err
 	}
-	return &rel, nil
+	rel := pickRelease(rels)
+	if rel == nil {
+		return nil, fmt.Errorf("no {{ .Name }} release found in %s/%s", repoOwner, repoName)
+	}
+	return rel, nil
+}
+
+// pickRelease is the newest release this tool can actually install.
+//
+// A prefixed tag is the answer whenever there is one. Falling back to
+// "carries an asset for this tool" covers releases cut before tags were
+// namespaced, which are still perfectly installable - dropping them
+// would strand anyone running one.
+func pickRelease(rels []githubRelease) *githubRelease {
+	want := assetName()
+	var fallback *githubRelease
+	for i := range rels {
+		r := &rels[i]
+		if r.Draft || r.Prerelease {
+			continue
+		}
+		if tagPrefix != "" && strings.HasPrefix(r.TagName, tagPrefix) {
+			return r
+		}
+		if tagPrefix == "" {
+			return r
+		}
+		if fallback == nil && hasAsset(r, want) {
+			fallback = r
+		}
+	}
+	return fallback
+}
+
+func hasAsset(r *githubRelease, name string) bool {
+	for _, a := range r.Assets {
+		if a.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func assetName() string {
+	return fmt.Sprintf("{{ .Name }}_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+}
+
+// releaseVersion is the semver part of a tag, with any prefix removed,
+// so "{{ .Name }}/v1.2.3" and "v1.2.3" compare the same.
+func releaseVersion(tag string) string {
+	return ensureV(strings.TrimPrefix(tag, tagPrefix))
 }
 
 // ensureV normalises a version toward the leading "v" that
