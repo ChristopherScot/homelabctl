@@ -21,6 +21,7 @@ help:
 	@echo "  make build      compile"
 	@echo "  make test       vet and tests (what CI runs)"
 	@echo "  make run        run it on :$(PORT)"
+	@echo "  make regen      regenerate code derived from the spec"
 	@echo "  make clean      remove build output"
 ifneq (,$(wildcard Makefile.local))
 	@$(MAKE) --no-print-directory help-local 2>/dev/null || true
@@ -44,6 +45,25 @@ test:
 .PHONY: run
 run:
 	go run .
+
+# Regenerate everything derived from a file in this repo: the code
+# generators, then the dependency lock. CI runs the same command and
+# fails if the result differs from what is committed, so stale
+# generated code is caught here rather than on a branch.
+#
+# It shells out to homelabctl, which is what CI runs, so the two cannot
+# drift. A service built without a spec has nothing to regenerate and
+# this says so and exits 0 - it is not an error.
+#
+# Add generators by adding their //go:generate directive, not by adding
+# steps here: regen runs `go generate ./...`, so a directive is picked
+# up automatically and CI can see it. A generator invoked only from this
+# file is one the staleness check cannot verify.
+.PHONY: regen
+regen:
+	@command -v homelabctl >/dev/null || { \
+		echo "homelabctl not found - https://github.com/ChristopherScot/homelabctl"; exit 1; }
+	@homelabctl regen
 
 .PHONY: clean
 clean:

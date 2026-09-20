@@ -1,5 +1,6 @@
-v1.18.16
+v1.18.17
 
+v1.18.17 every runtime gets `make regen`
 v1.18.16 go-service pins ogen, so "regenerate and diff" means something
 v1.18.15 `make build` writes the binary instead of discarding it
 v1.18.14 CI runs `make test`; homelabctl gets the Makefile it hands out
