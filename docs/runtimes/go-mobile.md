@@ -157,6 +157,19 @@ Fixing this properly means generating a signing key once, keeping it
 somewhere safe, and giving it to CI — worth doing when the app has real
 users, and not worth it before then.
 
+### The build needs two JDKs
+
+CI installs JDK 17, fetches the Android SDK, then drops to JDK 8 for
+`gogio`. That is not belt-and-braces - the two tools genuinely disagree:
+
+- `sdkmanager` refuses anything below 17
+- `gogio`'s `d8` step is stuck on 8, and Gio's install guide says newer
+  Java "will break the build"
+
+Installing 8 first fails, because fetching the SDK is what runs
+`sdkmanager`. The generated workflow already has the right order; it is
+worth knowing before editing that section.
+
 ### Two couplings that fail quietly
 
 Neither is checked at build time:
