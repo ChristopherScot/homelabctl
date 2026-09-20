@@ -1,5 +1,6 @@
-v1.18.5
+v1.18.6
 
+v1.18.6 a go-mobile runtime: a Gio app that builds an installable Android APK
 v1.18.5 continues ci-scripts' version line, so `update` can migrate onto it
 v0.0.3 scaffolded services download homelabctl from its own repo
 v0.0.2 first release from homelabctl's own repo
