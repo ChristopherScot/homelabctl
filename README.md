@@ -89,8 +89,12 @@ mv homelabctl ~/bin/
 curl -sL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_darwin_amd64.tar.gz | tar xz
 mv homelabctl ~/bin/
 
-# Linux
+# Linux, x86
 curl -sL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar xz
+mv homelabctl ~/bin/
+
+# Linux, ARM (a Raspberry Pi, or an ARM server)
+curl -sL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_arm64.tar.gz | tar xz
 mv homelabctl ~/bin/
 ```
 
