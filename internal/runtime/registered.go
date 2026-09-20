@@ -53,6 +53,7 @@ func init() {
 			"clients_ts_index.d.ts.tmpl":   {dst: "clients/ts/index.d.ts", specOnly: true, regen: true},
 
 			"gitignore.tmpl": {dst: ".gitignore"},
+			"Makefile.tmpl":  {dst: "Makefile"},
 			"dockerignore":   {dst: ".dockerignore"},
 
 			// Carried on Artifacts rather than written from this map -
@@ -79,6 +80,7 @@ func init() {
 			"completion.go.tmpl":    {dst: "completion.go"},
 			"VERSION.tmpl":          {dst: "VERSION"},
 			"gitignore.tmpl":        {dst: ".gitignore"},
+			"Makefile.tmpl":         {dst: "Makefile"},
 		},
 	})
 
@@ -101,6 +103,7 @@ func init() {
 			"completion.go.tmpl":    {dst: "completion.go"},
 			"VERSION.tmpl":          {dst: "VERSION"},
 			"gitignore.tmpl":        {dst: ".gitignore"},
+			"Makefile.tmpl":         {dst: "Makefile"},
 		},
 	})
 
@@ -122,6 +125,7 @@ func init() {
 			"scaffold_test.go.tmpl": {dst: "scaffold_test.go"},
 			"VERSION.tmpl":          {dst: "VERSION"},
 			"gitignore.tmpl":        {dst: ".gitignore"},
+			"Makefile.tmpl":         {dst: "Makefile"},
 		},
 	})
 
@@ -139,6 +143,7 @@ func init() {
 			"server.ts.tmpl":      {dst: "server.ts"},
 			"server.test.ts.tmpl": {dst: "server.test.ts"},
 			"gitignore":           {dst: ".gitignore"},
+			"Makefile.tmpl":       {dst: "Makefile"},
 			// Dockerfile.dockerignore, not .dockerignore: this runtime
 			// builds from the REPOSITORY root so a sibling client is in
 			// scope, and Docker reads a plain .dockerignore only from

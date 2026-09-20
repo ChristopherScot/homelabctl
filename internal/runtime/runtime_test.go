@@ -1895,3 +1895,43 @@ func TestWorkflowInstallsHomelabctlBeforeAskingForTheImage(t *testing.T) {
 		})
 	}
 }
+
+// Every runtime ships a Makefile, and every Makefile answers the same
+// four verbs. The point is that someone landing in any service in any
+// repo can run `make test` without first reading how that particular
+// one is built - so a runtime that quietly stops shipping one, or
+// invents its own vocabulary, defeats it.
+func TestEveryRuntimeShipsAMakefile(t *testing.T) {
+	for _, name := range Names() {
+		t.Run(name, func(t *testing.T) {
+			r, err := Get(name)
+			if err != nil {
+				t.Fatalf("Get(%q) = %v", name, err)
+			}
+
+			var body string
+			for _, f := range r.Artifacts(testParams()).Files {
+				if f.Path == "Makefile" {
+					body = f.Body
+				}
+			}
+			if body == "" {
+				t.Fatal("no Makefile: `make test` has to mean the same thing everywhere")
+			}
+
+			for _, target := range []string{"build:", "test:", "run:", "clean:", "help:"} {
+				if !strings.Contains(body, "\n"+target) {
+					t.Errorf("no %s target", strings.TrimSuffix(target, ":"))
+				}
+			}
+
+			// Service-specific setup goes in Makefile.local, which is
+			// not generated and so survives a regenerate. Without the
+			// include, the only place to put it is this file, and the
+			// next `homelabctl init --overwrite Makefile` eats it.
+			if !strings.Contains(body, "-include Makefile.local") {
+				t.Error("does not include Makefile.local, so local additions are lost on regenerate")
+			}
+		})
+	}
+}
