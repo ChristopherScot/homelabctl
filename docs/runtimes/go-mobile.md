@@ -170,6 +170,16 @@ Installing 8 first fails, because fetching the SDK is what runs
 `sdkmanager`. The generated workflow already has the right order; it is
 worth knowing before editing that section.
 
+### The version has four parts, not three
+
+`gogio -version` wants `major.minor.patch.versioncode`. The fourth is
+Android's integer `versionCode`, and it must INCREASE on every release -
+a phone treats a lower one as a downgrade and refuses to install.
+
+The workflow appends `github.run_number`, which only ever goes up. Your
+`VERSION` file stays ordinary three-part semver; the fourth number is
+CI's business, not something to maintain by hand.
+
 ### Two couplings that fail quietly
 
 Neither is checked at build time:
