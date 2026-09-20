@@ -25,7 +25,7 @@ are](#what-the-pieces-are). Otherwise skip to [Quickstart](#quickstart-your-firs
 - [What the pieces are](#what-the-pieces-are)
 - [Install](#install)
 - [Quickstart: your first service](#quickstart-your-first-service)
-- [The four kinds of thing you can make](#the-four-kinds-of-thing-you-can-make)
+- [The five kinds of thing you can make](#the-five-kinds-of-thing-you-can-make)
 - [Changing your service](#changing-your-service)
 - [Adding secrets](#adding-secrets)
 - [Putting it on the internet](#putting-it-on-the-internet)
@@ -292,7 +292,7 @@ You want `Synced / Healthy` from the first and `Running` from the
 second. If you do not get both, jump to [When something goes
 wrong](#when-something-goes-wrong).
 
-## The four kinds of thing you can make
+## The five kinds of thing you can make
 
 Pick with `--runtime` when you run `init`. Each has its own guide with
 more detail:
@@ -303,6 +303,7 @@ more detail:
 | `node-service` | a TypeScript web service | [docs/runtimes/node-service.md](docs/runtimes/node-service.md) |
 | `go-cli` | a command-line tool | [docs/runtimes/go-cli.md](docs/runtimes/go-cli.md) |
 | `go-tui` | a terminal app | [docs/runtimes/go-tui.md](docs/runtimes/go-tui.md) |
+| `go-mobile` | an Android app | [docs/runtimes/go-mobile.md](docs/runtimes/go-mobile.md) |
 
 ### `go-service` — a Go web service
 
@@ -382,6 +383,25 @@ homelabctl init mytui --runtime go-tui
 Same release process as `go-cli`.
 
 More: [docs/runtimes/go-tui.md](docs/runtimes/go-tui.md).
+
+### `go-mobile` — an Android app
+
+An app you install on a phone. The interface is written in Go, and the
+same code runs in a window on your laptop while you work on it.
+
+```sh
+homelabctl init myapp --runtime go-mobile
+cd myapp
+go run .
+```
+
+Releasing works like `go-cli`: edit `VERSION` and push. CI builds an
+`.apk` and attaches it to the release, and you install it by opening
+that file on the phone.
+
+Android only — see the guide for why there is no iPhone build.
+
+More: [docs/runtimes/go-mobile.md](docs/runtimes/go-mobile.md).
 
 ## Changing your service
 

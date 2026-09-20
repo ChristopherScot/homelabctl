@@ -85,12 +85,16 @@ func TestHardenedRuntimesRunAsNonroot(t *testing.T) {
 
 // A CLI ships a self-update command, which is the reason the shape exists;
 // without it users have no way to get a new version.
+//
+// Selected by SelfUpdates, not by !Deployable: go-mobile is not
+// deployable either and ships no update command, because Android
+// installs apps.
 func TestCLIRuntimesShipSelfUpdate(t *testing.T) {
 	p := Params{Name: "mytool", Module: "github.com/o/mytool", Owner: "o", Port: 3000, Spec: true}
 	for _, name := range Names() {
 		r, _ := Get(name)
 		a := r.Artifacts(p)
-		if a.Deployable {
+		if !a.SelfUpdates {
 			continue
 		}
 		var hasUpdate, hasVersion bool

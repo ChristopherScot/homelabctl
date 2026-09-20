@@ -59,6 +59,11 @@ type embedded struct {
 	deployable bool
 	hardened   bool
 
+	// selfUpdates: the released binary can replace itself, so users get
+	// a new version with `<name> update`. Every CLI shape does; a phone
+	// app does not, because Android installs apps.
+	selfUpdates bool
+
 	// generate rebuilds what the service's own sources derive.
 	generate [][]string
 
@@ -161,7 +166,7 @@ func (e embedded) render(name string, p Params) string {
 // deployable runtime simply has no Dockerfile, so callers never ask "what
 // kind is this?" - they ask what they were given.
 func (e embedded) Artifacts(p Params) Artifacts {
-	a := Artifacts{Files: e.renderFiles(p), Deployable: e.deployable}
+	a := Artifacts{Files: e.renderFiles(p), Deployable: e.deployable, SelfUpdates: e.selfUpdates}
 	if e.deployable {
 		a.Dockerfile = e.render("Dockerfile", p)
 	}

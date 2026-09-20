@@ -1,0 +1,28 @@
+package main
+
+// The app's logic, kept out of main.go on purpose.
+//
+// Anything that touches layout.Context needs a Gio frame to run, and a
+// CI runner has no display - so a test of the UI is an integration
+// test with a window in it. Logic that lives here is a plain function
+// over plain values, and `go test ./...` covers it on any machine.
+//
+// The seam to aim for: layout() reads state and draws it, and every
+// decision about WHAT to draw is a function here.
+
+import "fmt"
+
+// describe turns the counter into the line the UI shows.
+//
+// Trivial today, and the point is the shape rather than the content -
+// this is where a real app's rules go, testable without a screen.
+func describe(count int) string {
+	switch count {
+	case 0:
+		return "Nothing tapped yet."
+	case 1:
+		return "Tapped once."
+	default:
+		return fmt.Sprintf("Tapped %d times.", count)
+	}
+}

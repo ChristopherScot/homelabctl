@@ -1,0 +1,131 @@
+# Builds an APK you can put on a phone, and a desktop binary for each
+# platform. Triggered by a VERSION change so a release is deliberate -
+# tests run on every push and PR.
+#
+# Android only. iOS is deliberately absent: an .ipa needs a macOS
+# runner, an Apple certificate and a provisioning profile, and without
+# a paid developer account the result expires after seven days. That
+# is a subscription and a weekly rebuild to install one app on one
+# phone, so this scaffolds the half that works.
+name: {{ .Name }}
+
+on:
+  push:
+    branches: [main]{{ if .PathFilter }}
+    paths: ['{{ .PathFilter }}/**', '.github/workflows/{{ .Name }}.yaml']{{ end }}
+  pull_request:{{ if .PathFilter }}
+    paths: ['{{ .PathFilter }}/**']{{ end }}
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read{{ if .PathFilter }}
+    defaults:
+      run:
+        working-directory: {{ .PathFilter }}{{ end }}
+    steps:
+      - uses: actions/checkout@v4
+
+{{ .BuildSteps }}
+  release:
+    # Only when VERSION changed, and only from main.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Release only on a VERSION change
+        id: gate
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qx '{{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION'; then
+            echo "go=true" >> $GITHUB_OUTPUT
+          else
+            echo "go=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-go@v5
+        if: steps.gate.outputs.go == 'true'
+        with:
+          go-version-file: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.mod
+          cache: true
+          cache-dependency-path: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.sum
+
+      # JDK 8 specifically. Gio's own install guide says "more recent
+      # versions of Java will break the build" - this is not caution,
+      # the Android build tooling gogio drives fails on newer JDKs.
+      - uses: actions/setup-java@v4
+        if: steps.gate.outputs.go == 'true'
+        with:
+          distribution: temurin
+          java-version: "8"
+
+      # SDK >= 31, which is Gio's stated minimum. The NDK is what
+      # cross-compiles the Go code for the phone's CPU.
+      - uses: android-actions/setup-android@v3
+        if: steps.gate.outputs.go == 'true'
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 ndk;26.1.10909125'
+
+      - name: Read version
+        if: steps.gate.outputs.go == 'true'
+        id: v
+        run: echo "version=$(head -n1 {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Install gogio
+        if: steps.gate.outputs.go == 'true'
+        run: go install gioui.org/cmd/gogio@latest
+
+      # gogio signs the APK itself. Given no keystore it generates a
+      # debug one and signs with that, which is enough for a phone to
+      # install after allowing unknown sources - no Play Console, no
+      # certificate to obtain.
+      #
+      # The cost of a debug key: Android identifies an app by the pair
+      # (app id, signing key), and CI generates a fresh key each run.
+      # So an upgrade over a previous install is REFUSED, and the fix
+      # is to uninstall first. A real keystore held in Vault removes
+      # that, and is the upgrade path when this stops being a toy.
+      #
+      # gogio strips the leading v from the version: it wants semver.
+      - name: Build the APK
+        if: steps.gate.outputs.go == 'true'
+        working-directory: {{ if .PathFilter }}{{ .PathFilter }}{{ else }}.{{ end }}
+        run: |
+          set -eu
+          VERSION="${{ "{{" }} steps.v.outputs.version {{ "}}" }}"
+          gogio \
+            -target android \
+            -appid {{ .AppID }} \
+            -name '{{ .Title }}' \
+            -version "${VERSION#v}" \
+            -minsdk 31 \
+            -ldflags "-X main.version=$VERSION" \
+            -o {{ .Name }}.apk \
+            .
+          sha256sum {{ .Name }}.apk > checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        if: steps.gate.outputs.go == 'true'
+        with:
+          tag_name: ${{ "{{" }} steps.v.outputs.version {{ "}}" }}
+          files: |
+            {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}{{ .Name }}.apk
+            {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}checksums.txt
+          body: |
+            ## Install on Android
+
+            Download `{{ .Name }}.apk` below and open it on your phone.
+            Android will ask permission to install from this source the
+            first time.
+
+            **Signed with a throwaway debug key**, which CI regenerates
+            on every release. Android refuses to upgrade an app whose
+            signing key changed, so uninstall the previous version
+            before installing this one.

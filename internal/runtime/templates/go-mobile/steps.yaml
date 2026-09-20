@@ -1,0 +1,22 @@
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.mod
+          cache: true
+          cache-dependency-path: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.sum
+
+      # Gio links against X11 and Wayland to build for desktop, and the
+      # runner has neither. Without these the build fails on a missing
+      # C header, which reads like a Go problem and is not.
+      - name: Install Gio's desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libgles2-mesa-dev \
+            libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...

@@ -187,7 +187,7 @@ func runInit(o initOpts) error {
 		}
 	}
 	if o.remoteOnly {
-		printNext(o, c, dir, isCLI)
+		printNext(o, c, dir, arts)
 		return nil
 	}
 
@@ -209,7 +209,7 @@ func runInit(o initOpts) error {
 	if tidyErr != nil && !errors.Is(tidyErr, errDepsUnresolved) {
 		return fmt.Errorf("local setup: %w", tidyErr)
 	}
-	printNext(o, c, target, isCLI)
+	printNext(o, c, target, arts)
 	if tidyErr != nil {
 		fmt.Println()
 		fmt.Fprintf(os.Stderr, "WARNING: dependencies did not resolve, so this tree will not build yet.\n")
@@ -952,7 +952,13 @@ func setupLocal(o initOpts, c *config.Config, r runtime.Runtime, dir string) err
 // report it after the next-steps text rather than aborting on it.
 var errDepsUnresolved = errors.New("dependencies did not resolve")
 
-func printNext(o initOpts, c *config.Config, dir string, isCLI bool) {
+// arts rather than a pair of bools: both questions below - is there a
+// cluster to deploy to, and can the binary update itself - are facts
+// about what this runtime produces, and they no longer answer the same
+// way.
+func printNext(o initOpts, c *config.Config, dir string, arts runtime.Artifacts) {
+	isCLI := !arts.Deployable
+	selfUpdates := arts.SelfUpdates
 	fmt.Println()
 	fmt.Println("what's next:")
 	if !o.remoteOnly {
@@ -960,7 +966,15 @@ func printNext(o initOpts, c *config.Config, dir string, isCLI bool) {
 		if isCLI {
 			fmt.Println("  - bump VERSION and push; CI cross-compiles and publishes a release")
 			fmt.Println()
-			fmt.Printf("    users then install with `%s update`\n", o.name)
+			// Not every non-deployable runtime self-updates: a phone
+			// app cannot replace itself on disk, so pointing someone
+			// at `<name> update` would send them looking for a
+			// command that is not there.
+			if selfUpdates {
+				fmt.Printf("    users then install with `%s update`\n", o.name)
+			} else {
+				fmt.Println("    download the release asset and install it on the device")
+			}
 			return
 		}
 		fmt.Println("  - push to main; CI builds and pushes the image")
