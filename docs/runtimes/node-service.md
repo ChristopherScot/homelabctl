@@ -150,6 +150,47 @@ requests.
 If you want other services to have a generated client, use `go-service`
 instead.
 
+## Calling a go-service in the same repo
+
+A spec-first `go-service` generates a TypeScript client into
+`clients/ts/`, and a node-service in the same repo can use it. Point at
+the directory rather than at npm:
+
+```json
+"dependencies": {
+  "@you/thatservice-client": "file:../thatservice/clients/ts",
+  "openapi-fetch": "^0.17.0"
+}
+```
+
+`file:` is npm's version of Go's `replace` directive. It symlinks the
+client into `node_modules`, so `homelabctl regen` on the API reaches this
+service on the next build - which means changing an API and the thing
+that calls it is one commit, not a publish between two.
+
+Depending on the published package instead works, but you cannot test a
+spec change until it is released, and the pinned range drifts behind the
+spec without anything failing.
+
+Two things `file:` needs, both of which fail confusingly if missed:
+
+**Declare `openapi-fetch` here too.** npm does not install a symlinked
+package's own dependencies, so the client's import of it resolves against
+this service's `node_modules`. Without it the build fails with "Cannot
+find package 'openapi-fetch'" naming a file in the OTHER service's
+directory.
+
+**Set `resolve.preserveSymlinks: true`** in every vite config - the SSR
+one and the browser one. The bundler otherwise resolves the client's
+imports from the symlink's real path, walks up from
+`../thatservice/clients/ts/` looking for `node_modules`, finds none, and
+fails. Node's runtime resolver follows the link back; the bundler does
+not. Tests can pass while the container build fails on exactly this.
+
+The Dockerfile already supports it: the build context is the REPOSITORY
+root, so the sibling directory is visible, and vite inlines the client
+into the bundle, so no symlink reaches the running image.
+
 ## Deploying
 
 Covered in the [main guide](../../README.md#quickstart-your-first-service).
