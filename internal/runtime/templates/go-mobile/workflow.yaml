@@ -122,7 +122,13 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: steps.gate.outputs.go == 'true'
         with:
-          tag_name: ${{ "{{" }} steps.v.outputs.version {{ "}}" }}
+          # Prefixed in a monorepo, because releases are per REPOSITORY
+          # and the siblings each cut their own. Sharing one namespace
+          # made `latest` mean "whichever service released last", and
+          # two services reaching the same number attached their assets
+          # to ONE release where the second checksums.txt overwrote the
+          # first. A dedicated repo has one release line, so no prefix.
+          tag_name: {{ if .PathFilter }}{{ .Name }}/{{ end }}${{ "{{" }} steps.v.outputs.version {{ "}}" }}
           files: |
             {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}{{ .Name }}.apk
             {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}checksums.txt
