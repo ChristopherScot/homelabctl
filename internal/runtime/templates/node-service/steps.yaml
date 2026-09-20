@@ -23,11 +23,12 @@
       # A service that HAS one gets its API contract checked: this is
       # what catches a client that has drifted from the spec, which
       # otherwise shows up as a 404 in production or not at all.
-      - name: Typecheck
-        run: npm run typecheck --if-present
-
+      # make test, not the commands themselves: the Makefile says it
+      # runs "what CI runs", and that is only true if this IS it. Two
+      # copies of the same command drift, and the one that drifts is
+      # whichever nobody is looking at.
       - name: Test
-        run: npm test
+        run: make test
 
       # Build the bundle AND run it.
       #

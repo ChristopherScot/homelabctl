@@ -15,8 +15,9 @@
             libxkbcommon-dev libxkbcommon-x11-dev libgles2-mesa-dev \
             libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
 
+      # make test, not the commands themselves: the Makefile says it
+      # runs "what CI runs", and that is only true if this IS it. Two
+      # copies of the same command drift, and the one that drifts is
+      # whichever nobody is looking at.
       - name: Test
-        run: go test ./...
-
-      - name: Vet
-        run: go vet ./...
+        run: make test

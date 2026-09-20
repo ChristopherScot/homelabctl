@@ -23,11 +23,13 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      # make test, not the commands themselves: the Makefile says it
+      # runs "what CI runs", and that is only true if this IS it. This
+      # repo generates that Makefile for every other service, so it is
+      # the last place that should be running its own private copy of
+      # the commands.
       - name: Test
-        run: go test -race ./...
-
-      - name: Vet
-        run: go vet ./...
+        run: make test
 
   release:
     # Only when VERSION changed, and only from main.

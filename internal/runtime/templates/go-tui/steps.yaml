@@ -4,8 +4,9 @@
           cache: true
           cache-dependency-path: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.sum
 
+      # make test, not the commands themselves: the Makefile says it
+      # runs "what CI runs", and that is only true if this IS it. Two
+      # copies of the same command drift, and the one that drifts is
+      # whichever nobody is looking at.
       - name: Test
-        run: go test -race ./...
-
-      - name: Vet
-        run: go vet ./...
+        run: make test

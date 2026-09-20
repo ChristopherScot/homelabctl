@@ -1689,8 +1689,20 @@ func TestNodeServiceIsTypeScriptWithNoBuildStep(t *testing.T) {
 	if !strings.Contains(files["package.json"], `"typecheck"`) {
 		t.Error("no typecheck script; stripping types is not checking them")
 	}
-	if !strings.Contains(a.Workflow, "npm run typecheck") {
-		t.Error("CI does not typecheck")
+	// CI reaches it through `make test` rather than naming it itself,
+	// so follow the chain: the workflow calls make, and make typechecks
+	// before it tests.
+	if !strings.Contains(a.Workflow, "run: make test") {
+		t.Error("CI does not call make test, so it does not typecheck either")
+	}
+	var mk string
+	for _, f := range a.Files {
+		if f.Path == "Makefile" {
+			mk = f.Body
+		}
+	}
+	if !strings.Contains(mk, "npm run typecheck") {
+		t.Error("make test does not typecheck; stripping types is not checking them")
 	}
 }
 
@@ -1974,6 +1986,35 @@ func TestEveryRuntimeShipsAReadme(t *testing.T) {
 
 			if !strings.Contains(body, "TODO") {
 				t.Error("Usage should be a TODO: the scaffold cannot know what this is for")
+			}
+		})
+	}
+}
+
+// CI runs `make test`, not its own copy of the commands.
+//
+// The generated Makefile tells the reader `make test` is "what CI
+// runs". That is a promise, and it only holds while CI actually calls
+// it - two copies of the same command drift, and the one that drifts is
+// whichever nobody is looking at. go-mobile had already drifted: its CI
+// ran `go test ./...` while its Makefile ran `-race`.
+func TestCIRunsMakeTest(t *testing.T) {
+	for _, name := range Names() {
+		t.Run(name, func(t *testing.T) {
+			r, err := Get(name)
+			if err != nil {
+				t.Fatalf("Get(%q) = %v", name, err)
+			}
+			steps := r.Artifacts(testParams()).Workflow
+
+			if !strings.Contains(steps, "run: make test") {
+				t.Error("CI does not call `make test`, so the Makefile's claim is false")
+			}
+			// The commands themselves belong in one place.
+			for _, dup := range []string{"run: go test", "run: npm test", "run: go vet"} {
+				if strings.Contains(steps, dup) {
+					t.Errorf("CI still spells out %q itself", dup)
+				}
 			}
 		})
 	}

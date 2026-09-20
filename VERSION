@@ -1,5 +1,6 @@
-v1.18.13
+v1.18.14
 
+v1.18.14 CI runs `make test`; homelabctl gets the Makefile it hands out
 v1.18.13 go-mobile: repackage the APK so a phone will install it
 v1.18.12 a re-run keeps the runtime it found, or asks; it never guesses
 v1.18.11 every runtime ships a README, and a re-run keeps its own runtime
