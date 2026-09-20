@@ -129,6 +129,11 @@ func init() {
 			"gitignore.tmpl":        {dst: ".gitignore"},
 			"Makefile.tmpl":         {dst: "Makefile"},
 			"README.md.tmpl":        {dst: "README.md"},
+			// Shipped verbatim rather than templated: they are the
+			// reason a scaffolded APK installs at all, and there is
+			// nothing per-service in them.
+			"repack_apk.py": {dst: "repack_apk.py", plain: "repack_apk.py"},
+			"check_apk.py":  {dst: "check_apk.py", plain: "check_apk.py"},
 		},
 	})
 
