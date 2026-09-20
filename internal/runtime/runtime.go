@@ -90,6 +90,78 @@ func (p Params) BinaryName() string {
 	return p.Name
 }
 
+// AppID is the Android application id, reversed-domain style.
+//
+// Android identifies an installed app by this plus its signing key,
+// so it has to be stable: change it and a phone treats the next build
+// as a different app and keeps the old one alongside.
+//
+// Derived from the module path rather than asked for, so it is
+// consistent by construction - github.com/chris/pokemon/services/dex
+// becomes com.github.chris.pokemon.services.dex. Android requires at
+// least one dot and rejects segments starting with a digit or using
+// a hyphen, so each segment is sanitised.
+func (p Params) AppID() string {
+	raw := p.Module
+	if raw == "" {
+		raw = p.Name
+	}
+	// Reverse only the host, which is what makes it reversed-domain:
+	// github.com/owner/repo -> com.github, then owner.repo appended.
+	parts := strings.Split(raw, "/")
+	var out []string
+	if host := strings.Split(parts[0], "."); len(host) > 1 {
+		for i := len(host) - 1; i >= 0; i-- {
+			out = append(out, host[i])
+		}
+		parts = parts[1:]
+	}
+	out = append(out, parts...)
+
+	for i, seg := range out {
+		seg = strings.Map(func(r rune) rune {
+			switch {
+			case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+				return r
+			case r >= 'A' && r <= 'Z':
+				return r + ('a' - 'A')
+			}
+			// A hyphen or anything else is not legal in a Java
+			// package segment, which is what an app id is.
+			return '_'
+		}, seg)
+		if seg == "" || (seg[0] >= '0' && seg[0] <= '9') {
+			seg = "a" + seg
+		}
+		out[i] = seg
+	}
+	id := strings.Join(out, ".")
+	if !strings.Contains(id, ".") {
+		// Android rejects a single-segment id.
+		id = "app." + id
+	}
+	return id
+}
+
+// Title is the app's display name, as it appears under its icon.
+//
+// The service name with separators turned into spaces and words
+// capitalised: pokedex-tui becomes "Pokedex Tui". Close enough to
+// read on a home screen, and the author can edit it in the workflow
+// once - nothing regenerates it.
+func (p Params) Title() string {
+	words := strings.FieldsFunc(p.Name, func(r rune) bool { return r == '-' || r == '_' })
+	for i, w := range words {
+		if w != "" {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	if len(words) == 0 {
+		return p.Name
+	}
+	return strings.Join(words, " ")
+}
+
 // Context is the Docker build context: the service directory in a
 // monorepo, the repo root otherwise.
 
@@ -214,6 +286,15 @@ type Artifacts struct {
 	// Deployable says whether Kubernetes manifests and an Argo Application
 	// apply. False for a CLI, which ships as release assets.
 	Deployable bool
+
+	// SelfUpdates says the released binary can replace itself on disk,
+	// which is what `<name> update` does.
+	//
+	// Not the same as !Deployable, though it was until go-mobile: an
+	// APK is a release asset too, and Android owns installing it, so
+	// the app ships no update command. Callers that want to say how a
+	// user gets a new version must ask this rather than infer it.
+	SelfUpdates bool
 }
 
 // Runtime describes how to build one kind of thing in one language.

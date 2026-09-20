@@ -466,7 +466,7 @@ func TestPrintedCommandsAreRunnable(t *testing.T) {
 	c.Team = "platform"
 	c.Runtime = "go-service"
 	c.Spec = true
-	printNext(initOpts{name: "svc", owner: "Example"}, &c, "svc", false)
+	printNext(initOpts{name: "svc", owner: "Example"}, &c, "svc", runtime.Artifacts{Deployable: true})
 
 	w.Close()
 	os.Stdout = stdout

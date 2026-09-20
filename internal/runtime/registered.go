@@ -68,7 +68,7 @@ func init() {
 	// cross-compiles and publishes release assets, and ships the same
 	// self-update command homelabctl uses.
 	Register(embedded{
-		name: "go-cli", dir: "go-cli", deployable: false, hardened: false,
+		name: "go-cli", dir: "go-cli", deployable: false, hardened: false, selfUpdates: true,
 		lock:    [][]string{{"go", "mod", "tidy"}},
 		upgrade: [][]string{{"go", "get", "-u", "./..."}},
 		files: map[string]tmpl{
@@ -89,7 +89,7 @@ func init() {
 	// What differs is one line in main.go: the root command has a RunE
 	// that starts the program, where a CLI's root prints help.
 	Register(embedded{
-		name: "go-tui", dir: "go-tui", deployable: false, hardened: false,
+		name: "go-tui", dir: "go-tui", deployable: false, hardened: false, selfUpdates: true,
 		lock:    [][]string{{"go", "mod", "tidy"}},
 		upgrade: [][]string{{"go", "get", "-u", "./..."}},
 		files: map[string]tmpl{
@@ -99,6 +99,27 @@ func init() {
 			"update.go.tmpl":        {dst: "update.go"},
 			"scaffold_test.go.tmpl": {dst: "scaffold_test.go"},
 			"completion.go.tmpl":    {dst: "completion.go"},
+			"VERSION.tmpl":          {dst: "VERSION"},
+			"gitignore.tmpl":        {dst: ".gitignore"},
+		},
+	})
+
+	// A phone app. Gio draws its own widgets straight to a GPU surface -
+	// there is no Android toolkit under it - so the UI is Go, and the
+	// same code runs on a desktop where you can iterate on it quickly.
+	//
+	// Android only. iOS needs a paid Apple account for anything that
+	// lasts longer than seven days on a phone, so there is nothing
+	// useful to scaffold for it.
+	Register(embedded{
+		name: "go-mobile", dir: "go-mobile", deployable: false, hardened: false,
+		lock:    [][]string{{"go", "mod", "tidy"}},
+		upgrade: [][]string{{"go", "get", "-u", "./..."}},
+		files: map[string]tmpl{
+			"go.mod.tmpl":           {dst: "go.mod"},
+			"main.go.tmpl":          {dst: "main.go"},
+			"state.go.tmpl":         {dst: "state.go"},
+			"scaffold_test.go.tmpl": {dst: "scaffold_test.go"},
 			"VERSION.tmpl":          {dst: "VERSION"},
 			"gitignore.tmpl":        {dst: ".gitignore"},
 		},
