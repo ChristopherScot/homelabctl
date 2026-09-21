@@ -2,6 +2,7 @@ package render
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -1243,6 +1244,107 @@ func TestAnInertFloorIsNotWrittenToTheManifest(t *testing.T) {
 		}
 		if strings.Contains(body, "MIN_VERSION") {
 			t.Errorf("minVersion %q was written to the manifest:\n%s", v, body)
+		}
+	}
+}
+
+// A rate limit belongs to the host that asked for it, and to no other.
+//
+// The usual shape is a LAN name and a public one: the public one is
+// where abuse arrives, and the LAN one is where a battle board polls
+// every second and must not be throttled for it.
+func TestRateLimitAppliesToTheHostThatAsksForIt(t *testing.T) {
+	yes := true
+	c := base()
+	c.Ingress = &config.Ingress{Hosts: []config.IngressHost{
+		{Name: "svc.home.example.com", TLS: true},
+		{Name: "svc.example.com", TLS: true, Public: &yes, RateLimitRPS: 20},
+	}}
+
+	var doc string
+	for _, o := range mustAll(t, mustConfig(t, c)) {
+		if o.Path == "ingress.yaml" {
+			doc = o.Body
+		}
+	}
+	if doc == "" {
+		t.Fatal("no ingress.yaml")
+	}
+
+	parts := strings.Split(doc, "\n---\n")
+	if len(parts) != 2 {
+		t.Fatalf("expected a LAN and a public Ingress, got %d documents:\n%s", len(parts), doc)
+	}
+	for _, p := range parts {
+		limited := strings.Contains(p, "limit-rps")
+		public := strings.Contains(p, "ingressClassName: public")
+		switch {
+		case public && !limited:
+			t.Error("the public host asked for a limit and did not get one")
+		case !public && limited:
+			t.Error("the LAN host was throttled; polling from the house is not abuse")
+		}
+	}
+	if !strings.Contains(doc, `nginx.ingress.kubernetes.io/limit-rps: "20"`) {
+		t.Errorf("limit not rendered as nginx expects:\n%s", doc)
+	}
+}
+
+// Two hosts wanting different limits cannot share an Ingress: the limit
+// is an annotation, annotations are per Ingress, and one of the two
+// would silently get the other's. They go on separate documents.
+func TestHostsWithDifferentLimitsGetSeparateIngresses(t *testing.T) {
+	yes := true
+	c := base()
+	c.Ingress = &config.Ingress{Hosts: []config.IngressHost{
+		{Name: "a.example.com", TLS: true, Public: &yes, RateLimitRPS: 5},
+		{Name: "b.example.com", TLS: true, Public: &yes, RateLimitRPS: 50},
+	}}
+
+	var doc string
+	for _, o := range mustAll(t, mustConfig(t, c)) {
+		if o.Path == "ingress.yaml" {
+			doc = o.Body
+		}
+	}
+	if n := strings.Count(doc, "kind: Ingress"); n != 2 {
+		t.Errorf("two limits need two Ingresses, got %d:\n%s", n, doc)
+	}
+	for _, want := range []string{`limit-rps: "5"`, `limit-rps: "50"`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("lost %s:\n%s", want, doc)
+		}
+	}
+
+	// Two documents are not two objects if they share a name: kubectl
+	// keeps the last and the other is silently discarded, and
+	// cert-manager reissues one certificate over the other forever.
+	// Counting documents passed while both were called svc-public.
+	seen := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^  name: (.+)$`).FindAllStringSubmatch(doc, -1) {
+		n := strings.TrimSpace(m[1])
+		if seen[n] {
+			t.Errorf("two Ingresses both named %q; only one would survive apply:\n%s", n, doc)
+		}
+		seen[n] = true
+	}
+	// Same for the certificates they ask cert-manager for.
+	certs := map[string]bool{}
+	for _, m := range regexp.MustCompile(`secretName: (\S+)`).FindAllStringSubmatch(doc, -1) {
+		if certs[m[1]] {
+			t.Errorf("two Ingresses share secretName %q; cert-manager would fight itself", m[1])
+		}
+		certs[m[1]] = true
+	}
+}
+
+// No limit, no annotation - the default is unthrottled.
+func TestNoRateLimitRendersNoAnnotation(t *testing.T) {
+	c := base()
+	c.Ingress = &config.Ingress{Hosts: config.IngressHosts("h.example.com")}
+	for _, o := range mustAll(t, mustConfig(t, c)) {
+		if o.Path == "ingress.yaml" && strings.Contains(o.Body, "limit-rps") {
+			t.Errorf("throttled a host that did not ask:\n%s", o.Body)
 		}
 	}
 }

@@ -525,3 +525,36 @@ func TestMinVersionDefaultsToAbsent(t *testing.T) {
 		t.Errorf("Defaults().MinVersion = %q, want empty", got)
 	}
 }
+
+// A host must survive being written back out.
+//
+// init writes config.yaml by marshalling the Config, and IngressHost is
+// the one type that hand-maintains its own MarshalYAML - so a field
+// added to the struct does NOT appear there by existing. rateLimitRPS
+// was added and forgotten, and the limit vanished on the first
+// round-trip with nothing to notice.
+func TestAnIngressHostSurvivesARoundTrip(t *testing.T) {
+	yes := true
+	for _, h := range []IngressHost{
+		{Name: "svc.example.com", TLS: true, Public: &yes, RateLimitRPS: 20},
+		{Name: "svc.example.com", TLS: true, RateLimitRPS: 5},
+		{Name: "svc.home.example.com", TLS: true},
+	} {
+		raw, err := yaml.Marshal([]IngressHost{h})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back []IngressHost
+		if err := yaml.Unmarshal(raw, &back); err != nil {
+			t.Fatalf("%s: %v\n%s", h.Name, err, raw)
+		}
+		if len(back) != 1 {
+			t.Fatalf("%s: got %d hosts", h.Name, len(back))
+		}
+		got := back[0]
+		if got.Name != h.Name || got.TLS != h.TLS || got.RateLimitRPS != h.RateLimitRPS {
+			t.Errorf("host did not survive being written back:\n got %+v\nwant %+v\n yaml:\n%s",
+				got, h, raw)
+		}
+	}
+}

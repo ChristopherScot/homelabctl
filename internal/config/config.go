@@ -418,6 +418,29 @@ type IngressHost struct {
 	// nil means "whatever ingress.public says", so existing configs
 	// keep their meaning.
 	Public *bool
+
+	// RateLimitRPS caps requests per second from ONE CLIENT IP.
+	//
+	// Per host, for the same reason public is: a service usually has a
+	// LAN name and a WAN one, and they do not want the same limit. A
+	// battle board polling every second is normal traffic from the
+	// house and abuse from the internet.
+	//
+	// Per IP, not per user and not a total. nginx keys on
+	// $binary_remote_addr and has never heard of whatever a service
+	// calls an account, so this bounds one client rather than the
+	// service: a thousand addresses at 20 rps each is 20,000 rps
+	// arriving. It is also per controller replica, since the counters
+	// live in that pod's shared memory.
+	//
+	// It covers every PATH on the host: nginx annotations cannot say
+	// "10 for /register, 20 for everything else".
+	//
+	// And the number is not the ceiling. ingress-nginx renders
+	// `burst = rps * limit-burst-multiplier` (default 5) with nodelay,
+	// so 20 means "100 at once, then 20 a second sustained". Read it as
+	// the sustained rate, not as the most a client can send.
+	RateLimitRPS int
 }
 
 // IsPublic reports whether this host goes on the public controller,
@@ -437,9 +460,10 @@ func (h *IngressHost) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 	var m struct {
-		Name   string `yaml:"name"`
-		TLS    *bool  `yaml:"tls"`
-		Public *bool  `yaml:"public"`
+		Name         string `yaml:"name"`
+		TLS          *bool  `yaml:"tls"`
+		Public       *bool  `yaml:"public"`
+		RateLimitRPS int    `yaml:"rateLimitRPS"`
 	}
 	if err := value.Decode(&m); err != nil {
 		return fmt.Errorf("an ingress host must be a name, or a mapping of name and tls")
@@ -453,18 +477,22 @@ func (h *IngressHost) UnmarshalYAML(value *yaml.Node) error {
 		h.TLS = *m.TLS
 	}
 	h.Public = m.Public
+	h.RateLimitRPS = m.RateLimitRPS
 	return nil
 }
 
 // MarshalYAML writes back the form the host came from, so a file this
 // tool writes is a file it can read.
 func (h IngressHost) MarshalYAML() (any, error) {
-	if h.TLS == Certifiable(h.Name) && h.Public == nil {
+	if h.TLS == Certifiable(h.Name) && h.Public == nil && h.RateLimitRPS == 0 {
 		return h.Name, nil
 	}
 	m := map[string]any{"name": h.Name, "tls": h.TLS}
 	if h.Public != nil {
 		m["public"] = *h.Public
+	}
+	if h.RateLimitRPS > 0 {
+		m["rateLimitRPS"] = h.RateLimitRPS
 	}
 	return m, nil
 }

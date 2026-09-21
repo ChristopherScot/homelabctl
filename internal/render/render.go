@@ -910,6 +910,46 @@ spec:
 // The plain resource deliberately carries no cluster-issuer annotation.
 // That is what makes an impossible ACME order structurally impossible
 // rather than merely avoided - cert-manager never looks at it.
+// ingressGroup is what makes one Ingress document distinct from
+// another: the controller it routes through, whether it carries a
+// certificate, and its rate limit.
+//
+// rps is part of it because the limit is an annotation and annotations
+// are per Ingress - two hosts on one document could only have one, and
+// one of them would silently get the other's.
+type ingressGroup struct {
+	class string
+	tls   bool
+	rps   int
+}
+
+// name says what distinguishes this document, so it lives WITH the
+// thing that distinguishes it. Adding a field to the group without
+// extending this gave two documents the same metadata.name: kubectl
+// keeps the last, and cert-manager reissues one certificate over the
+// other forever - the loop ingressDoc's comment records having already
+// been fixed once.
+//
+// The rate limit earns a suffix only when it has to. A service with one
+// limited host is the normal case and keeps the name it already has, so
+// adding a limit does not rename an Ingress, drop the route while Argo
+// recreates it, and reissue the certificate. Only a service with TWO
+// limits - which has no name to keep, since it did not render two
+// documents before - pays for the distinction.
+func (g ingressGroup) name(svc string, ambiguous bool) string {
+	n := svc
+	if g.class == "public" {
+		n += "-public"
+	}
+	if !g.tls {
+		n += "-lan"
+	}
+	if ambiguous && g.rps > 0 {
+		n += fmt.Sprintf("-rps%d", g.rps)
+	}
+	return n
+}
+
 func ingress(c *config.Config) string {
 	// Grouped by controller AND by certificate, because both decide
 	// which Ingress a host belongs on.
@@ -920,24 +960,37 @@ func ingress(c *config.Config) string {
 	// pokemon.home.chrisscotmartin.com onto the public controller with
 	// it, a name resolving to 192.168.50.225 served by the controller
 	// facing the internet. A host is public or it is not.
-	type group struct {
-		class string
-		tls   bool
-	}
-	// Ordered, so the rendered output does not depend on map iteration.
-	order := []group{
-		{"external", true}, {"external", false},
-		{"public", true}, {"public", false},
-	}
-	hosts := map[group][]config.IngressHost{}
+	// rps is part of the key, not just class and tls: the limit is an
+	// annotation, annotations are per Ingress, and two hosts sharing a
+	// document can only have one. Grouping by it puts hosts that want
+	// different limits on different Ingresses instead of silently
+	// giving one of them the other's.
+	var order []ingressGroup
+	seen := map[ingressGroup]bool{}
+	hosts := map[ingressGroup][]config.IngressHost{}
 	for _, h := range c.Ingress.Hosts {
 		class := "external"
 		if h.IsPublic(c.Ingress.Public) {
 			class = "public"
 		}
-		g := group{class, h.TLS}
+		g := ingressGroup{class, h.TLS, h.RateLimitRPS}
+		if !seen[g] {
+			seen[g] = true
+			order = append(order, g)
+		}
 		hosts[g] = append(hosts[g], h)
 	}
+	// Ordered, so the rendered output does not depend on map iteration.
+	sort.Slice(order, func(i, j int) bool {
+		a, b := order[i], order[j]
+		if a.class != b.class {
+			return a.class < b.class
+		}
+		if a.tls != b.tls {
+			return a.tls
+		}
+		return a.rps < b.rps
+	})
 
 	var b strings.Builder
 	for _, g := range order {
@@ -954,24 +1007,25 @@ func ingress(c *config.Config) string {
 		// old object and creates the new one. That drops the route for
 		// a moment and re-associates the certificate. Worth doing once
 		// rather than carrying a conditional name forever.
-		name := c.Name
-		if g.class == "public" {
-			name += "-public"
-		}
-		if !g.tls {
-			name += "-lan"
-		}
 		if b.Len() > 0 {
 			b.WriteString("---\n")
 		}
-		b.WriteString(ingressDoc(c, g.class, name, hs, g.tls))
+		// Ambiguous when another group would produce this same name -
+		// i.e. two limits on one controller and certificate posture.
+		ambiguous := false
+		for _, other := range order {
+			if other != g && other.class == g.class && other.tls == g.tls {
+				ambiguous = true
+			}
+		}
+		b.WriteString(ingressDoc(c, g.class, g.name(c.Name, ambiguous), hs, g.tls, g.rps))
 	}
 	return b.String()
 }
 
 // ingressDoc renders one Ingress. tls decides whether it gets a
 // certificate and the annotations that go with one.
-func ingressDoc(c *config.Config, class, name string, hosts []config.IngressHost, tls bool) string {
+func ingressDoc(c *config.Config, class, name string, hosts []config.IngressHost, tls bool, rps int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -1002,6 +1056,13 @@ metadata:
 		b.WriteString(`    nginx.ingress.kubernetes.io/auth-url: "http://authelia.authelia.svc.cluster.local/api/verify"
     nginx.ingress.kubernetes.io/auth-signin: "https://auth.home.chrisscotmartin.com/?rd=$scheme://$host$escaped_request_uri"
 `)
+	}
+	// Passed in rather than read off hosts[0]: the caller owns the
+	// grouping, so it owns which limit this document carries. Reading it
+	// from the first host worked only because of a rule stated in a
+	// comment somewhere else.
+	if rps > 0 {
+		fmt.Fprintf(&b, "    nginx.ingress.kubernetes.io/limit-rps: \"%d\"\n", rps)
 	}
 	fmt.Fprintf(&b, "spec:\n  ingressClassName: %s\n", class)
 	if tls {
