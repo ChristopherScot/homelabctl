@@ -704,3 +704,47 @@ func TestARerunKeepsTheRuntimeFromConfig(t *testing.T) {
 		t.Errorf("Makefile is no longer a node-service one:\n%s", after)
 	}
 }
+
+// render refreshes config.schema.json, not just the manifests.
+//
+// The schema is a cache of a constant compiled into this binary, and it
+// used to be written only by init. So a field added to config.yaml
+// passed locally - the CLI validates against the compiled Schema - and
+// was rejected in CI, which validates against the committed file. The
+// visible failure was a Docker Hub 401 three steps later, because
+// `homelabctl image` exited quietly and the image name came out empty.
+func TestRenderRefreshesAStaleSchema(t *testing.T) {
+	dir := t.TempDir()
+	o := initOpts{
+		name: "svc", runtimeID: "go-service",
+		owner: "o", localOnly: true, yes: true, skipTidy: true,
+	}
+	c := config.Defaults()
+	c.Name, c.Team, c.Runtime = o.name, defaultTeam, o.runtimeID
+	c.Image = config.Image{Repository: "ghcr.io/o/svc"}
+	if err := c.Complete(); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := runtime.Get(o.runtimeID)
+	if err := setupLocal(o, &c, r, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	schema := filepath.Join(dir, config.SchemaFileName)
+	if err := os.WriteFile(schema, []byte(`{"stale":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(dir)
+	if err := runRender(renderOpts{cfgPath: "config.yaml"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != config.Schema {
+		t.Error("render left a stale schema: the CLI would accept a config CI rejects")
+	}
+}

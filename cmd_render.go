@@ -127,5 +127,23 @@ func runRender(o renderOpts) error {
 		fmt.Println("wrote", p)
 	}
 
+	// The schema too, beside config.yaml rather than in deploy/.
+	//
+	// It is a cache of a constant compiled into this binary, so a copy
+	// left by an older homelabctl describes fields the tool no longer
+	// has and omits the ones it gained. It used to be written only by
+	// init, which meant a field added to config.yaml passed locally -
+	// the CLI validates against the compiled Schema - and was rejected
+	// in CI, which validates against the committed file. The visible
+	// failure was a Docker Hub 401 three steps later, because
+	// `homelabctl image` exited quietly and the image name came out
+	// empty.
+	//
+	// Not under --out: that redirects the manifests, and the schema
+	// belongs to the service directory whatever deploy/ is doing.
+	if err := config.WriteSchema(filepath.Dir(o.cfgPath)); err != nil {
+		return err
+	}
+
 	return nil
 }
