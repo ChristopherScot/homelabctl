@@ -520,6 +520,14 @@ spec:
 	// Readiness polls faster than liveness: a slow readiness probe leaves a
 	// rolling pod taking traffic before it is ready, while an aggressive
 	// liveness probe restarts pods that are merely busy.
+	//
+	// Readiness() is Path unless the service set probes.readyPath, so a
+	// service that answers one question on one endpoint is unchanged.
+	// The two are different questions though - liveness asks whether to
+	// RESTART this pod, readiness whether to SEND IT TRAFFIC - and a
+	// service with a database can be alive and unable to serve. Pointing
+	// both at /healthz means such a pod reports Ready with a dead
+	// connection.
 	fmt.Fprintf(&b, `          readinessProbe:
             httpGet:
               path: %s
@@ -536,7 +544,7 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 5
-`, c.Probes.Path, c.Port, c.Probes.Path, c.Port)
+`, c.Probes.Readiness(), c.Port, c.Probes.Path, c.Port)
 
 	if c.Hardened {
 		b.WriteString(`      volumes:
