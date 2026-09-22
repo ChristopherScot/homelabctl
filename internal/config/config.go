@@ -610,7 +610,40 @@ type Ingress struct {
 }
 
 type Probes struct {
+	// Path is what BOTH probes hit unless ReadyPath says otherwise.
+	// Liveness asks "is this process alive"; a service with nothing
+	// else to say answers the same question twice, which is what every
+	// service here did before ReadyPath existed.
 	Path string `yaml:"path,omitempty"`
+
+	// ReadyPath is the readiness probe's path, when it differs.
+	//
+	// The two probes answer different questions. Liveness: is the
+	// process wedged, should kubelet restart it. Readiness: can this
+	// pod serve a request right now. A service with a dependency -
+	// a database, a cache, an upstream - can be perfectly alive and
+	// unable to serve, and reporting Ready in that state sends it
+	// traffic it will fail.
+	//
+	// Empty means "same as Path", which is every existing service:
+	// most have only /healthz, and pointing readiness at a /readyz
+	// they do not serve would fail every probe and take them down.
+	// So this is opt-in, and a service opts in by implementing the
+	// endpoint first.
+	ReadyPath string `yaml:"readyPath,omitempty"`
+}
+
+// Readiness is the path the readiness probe should hit: ReadyPath when
+// the service declares one, otherwise Path. One place decides, so the
+// renderer cannot drift from the schema's meaning.
+func (p *Probes) Readiness() string {
+	if p == nil {
+		return DefaultProbePath
+	}
+	if p.ReadyPath != "" {
+		return p.ReadyPath
+	}
+	return p.Path
 }
 
 type Resources struct {

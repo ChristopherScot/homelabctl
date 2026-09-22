@@ -1,5 +1,6 @@
-v1.18.22
+v1.18.23
 
+v1.18.23 readiness and liveness can be different endpoints
 v1.18.22 render refreshes config.schema.json, so the CLI and CI agree
 v1.18.21 a host can cap requests per second from one client IP
 v1.18.20 node services declare the node they need, and enforce it
