@@ -96,10 +96,13 @@ func init() {
 		lock:    [][]string{{"go", "mod", "tidy"}},
 		upgrade: [][]string{{"go", "get", "-u", "./..."}},
 		files: map[string]tmpl{
-			"go.mod.tmpl":           {dst: "go.mod"},
-			"main.go.tmpl":          {dst: "main.go"},
-			"model.go.tmpl":         {dst: "model.go"},
-			"update.go.tmpl":        {dst: "update.go"},
+			"go.mod.tmpl":   {dst: "go.mod"},
+			"main.go.tmpl":  {dst: "main.go"},
+			"model.go.tmpl": {dst: "model.go"},
+			// The CLI's, rather than a byte-identical copy: both
+			// renderings are the same file with a different name
+			// substituted, so a self-updater fix should be made once.
+			"go-cli/update.go.tmpl": {dst: "update.go"},
 			"scaffold_test.go.tmpl": {dst: "scaffold_test.go"},
 			"completion.go.tmpl":    {dst: "completion.go"},
 			"VERSION.tmpl":          {dst: "VERSION"},

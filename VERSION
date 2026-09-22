@@ -1,5 +1,6 @@
-v1.18.23
+v1.18.24
 
+v1.18.24 go-tui shares the CLI update template instead of copying it
 v1.18.23 readiness and liveness can be different endpoints
 v1.18.22 render refreshes config.schema.json, so the CLI and CI agree
 v1.18.21 a host can cap requests per second from one client IP
