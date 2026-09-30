@@ -1,8 +1,7 @@
 package main
 
-// A TUI looks untestable and is not: Update is a pure function from
-// (state, message) to state, so the whole interface can be driven
-// without a terminal. These tests send messages directly.
+// Update is a pure function of (state, message), so the interface can be
+// driven without a terminal.
 
 import (
 	"strings"
@@ -13,12 +12,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// The list is sized from the window minus whatever frame appStyle adds.
-//
-// Getting this wrong is not subtle but it is easy: hardcode the padding
-// here and in the style, change one, and the list runs a row past the
-// bottom of the terminal with its own help line scrolled off. Deriving
-// it from GetFrameSize keeps the two in step.
+// The list is sized from the window minus whatever frame appStyle adds;
+// hardcoding the padding in both places drifts silently.
 func TestListIsSizedToTheWindowMinusItsFrame(t *testing.T) {
 	m, _ := newModel().Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
@@ -31,8 +26,6 @@ func TestListIsSizedToTheWindowMinusItsFrame(t *testing.T) {
 	}
 }
 
-// Everything the list draws has to fit the width it was given, or it
-// overflows whatever is beside it.
 func TestRenderedListStaysWithinItsWidth(t *testing.T) {
 	m, _ := newModel().Update(tea.WindowSizeMsg{Width: 60, Height: 20})
 
@@ -43,8 +36,8 @@ func TestRenderedListStaysWithinItsWidth(t *testing.T) {
 	}
 }
 
-// q quits - but not while the filter is open, or a name containing "q"
-// could not be typed. This is the bug the FilterState check prevents.
+// q must not quit while the filter is open, or a name containing "q"
+// could not be typed.
 func TestQuitKey(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -58,7 +51,6 @@ func TestQuitKey(t *testing.T) {
 			m := newModel()
 			m.list.SetSize(80, 24)
 			if tc.filtering {
-				// Open the filter the way the user does.
 				updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 				m = updated.(model)
 				if m.list.FilterState() != list.Filtering {
@@ -68,7 +60,6 @@ func TestQuitKey(t *testing.T) {
 
 			_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 
-			// tea.Quit is a Cmd; calling it yields tea.QuitMsg.
 			quit := false
 			if cmd != nil {
 				if _, ok := cmd().(tea.QuitMsg); ok {
@@ -82,13 +73,9 @@ func TestQuitKey(t *testing.T) {
 	}
 }
 
-// The help line tells the user how to leave. A TUI that traps someone in
-// an alt-screen with no visible way out is the worst failure this can
-// have, so it is worth a test.
-//
-// Asserting on "quit" alone, not "q quit": the rendered help carries
-// ANSI styling between the key and its label, so the two are not
-// adjacent in the output even though they are on screen.
+// Trapping the user in an alt-screen with no visible exit is the worst
+// failure this can have. Asserting on "quit" alone: the rendered help
+// carries ANSI styling between the key and its label.
 func TestViewShowsHowToQuit(t *testing.T) {
 	m, _ := newModel().Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -97,10 +84,8 @@ func TestViewShowsHowToQuit(t *testing.T) {
 	}
 }
 
-// Lip Gloss v2 removed AdaptiveColor, so components no longer detect the
-// terminal background themselves. Init has to ask, and Update has to
-// restyle when the answer arrives - otherwise the dark defaults stay put
-// and the list is close to unreadable on a light terminal.
+// Lip Gloss v2 removed AdaptiveColor, so Init must ask for the
+// background and Update must restyle when it arrives.
 func TestRestylesForALightTerminal(t *testing.T) {
 	m, _ := newModel().Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -111,14 +96,6 @@ func TestRestylesForALightTerminal(t *testing.T) {
 		t.Error("view is identical on a light and dark terminal; BackgroundColorMsg is not restyling anything")
 	}
 }
-
-// --- release selection ---------------------------------------------
-//
-// These pin the rule that `update` installs THIS tool's releases. The
-// bug they replace: /releases/latest answers "the newest release in
-// this repository", so in a monorepo a CLI was offered a sibling's
-// Android APK and failed with "no asset for darwin/arm64" - a message
-// that blames the release rather than the question being wrong.
 
 func testRelease(tag string, draft, pre bool, assets ...string) githubRelease {
 	r := githubRelease{TagName: tag, Draft: draft, Prerelease: pre}
@@ -156,8 +133,6 @@ func TestTheNewestOfOursWins(t *testing.T) {
 }
 
 // Releases cut before tags were namespaced are still installable.
-// Stranding whoever is running one would be worse than the bug this
-// fixes.
 func TestLegacyUnprefixedReleasesStayReachable(t *testing.T) {
 	if tagPrefix == "" {
 		t.Skip("no prefix, so nothing is legacy")
@@ -183,8 +158,7 @@ func TestDraftsAndPrereleasesAreSkipped(t *testing.T) {
 	}
 }
 
-// The prefix must not reach semver, or every release reads as a
-// downgrade and `update` never offers anything.
+// The prefix must not reach semver, or every release reads as a downgrade.
 func TestTheVersionComparedHasNoPrefix(t *testing.T) {
 	if got := releaseVersion(tagPrefix + "v1.2.3"); got != "v1.2.3" {
 		t.Errorf("releaseVersion(%q) = %q, want v1.2.3", tagPrefix+"v1.2.3", got)

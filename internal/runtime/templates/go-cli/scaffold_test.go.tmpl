@@ -10,8 +10,6 @@ func TestVersionIsSet(t *testing.T) {
 	}
 }
 
-// The root command wires every subcommand; if one is dropped the CLI still
-// compiles and the command silently disappears.
 func TestRootHasExpectedCommands(t *testing.T) {
 	want := map[string]bool{"update": false, "version": false}
 	for _, c := range rootCmd().Commands() {
@@ -37,20 +35,15 @@ func TestIsNewer(t *testing.T) {
 		{"v1.1.0", "v1.1.0", false, "equal is not newer"},
 		{"v1.1.1", "v1.1", true, "an omitted patch reads as .0"},
 
-		// Double digits. A comparison that reads components pairwise
-		// gets these backwards and then reports "already up to date"
-		// forever - a failure nobody notices, because it looks like
-		// there simply being no new release.
+		// A pairwise compare gets these backwards and then reports
+		// "already up to date" forever.
 		{"v1.10.0", "v1.2.0", true, "10 is newer than 2, not older"},
 		{"v1.2.0", "v1.10.0", false, "and the reverse still holds"},
 		{"v2.0.0", "v1.99.99", true, "major wins over any minor"},
 
-		// A prerelease sorts before its release.
 		{"v1.0.0", "v1.0.0-rc1", true, "release supersedes its rc"},
 		{"v1.0.0-rc1", "v1.0.0", false, "an rc does not supersede the release"},
 
-		// Unparseable means "not newer": leaving someone on a working
-		// binary beats talking them into replacing it.
 		{"not-a-version", "v1.0.0", false, "unparseable latest"},
 		{"v1.0.0", "garbage", false, "unparseable current"},
 		{"dev", "v1.0.0", false, "a dev build is not a version"},
@@ -62,10 +55,8 @@ func TestIsNewer(t *testing.T) {
 	}
 }
 
-// The caller hands isNewer whatever the tag and the ldflags say, which
-// may or may not carry a v. semver.IsValid rejects the unprefixed
-// spelling, and an invalid version means "not newer" - so if this
-// normalisation broke, update would go silent rather than fail loudly.
+// semver.IsValid rejects an unprefixed version, so if ensureV broke
+// update would go silent rather than fail loudly.
 func TestEnsureVAcceptsEitherSpelling(t *testing.T) {
 	for _, in := range []string{"1.2.3", "v1.2.3"} {
 		if got := ensureV(in); got != "v1.2.3" {
@@ -76,14 +67,6 @@ func TestEnsureVAcceptsEitherSpelling(t *testing.T) {
 		t.Error("a mixed-spelling comparison did not reach semver intact")
 	}
 }
-
-// --- release selection ---------------------------------------------
-//
-// These pin the rule that `update` installs THIS tool's releases. The
-// bug they replace: /releases/latest answers "the newest release in
-// this repository", so in a monorepo a CLI was offered a sibling's
-// Android APK and failed with "no asset for darwin/arm64" - a message
-// that blames the release rather than the question being wrong.
 
 func testRelease(tag string, draft, pre bool, assets ...string) githubRelease {
 	r := githubRelease{TagName: tag, Draft: draft, Prerelease: pre}
@@ -121,8 +104,6 @@ func TestTheNewestOfOursWins(t *testing.T) {
 }
 
 // Releases cut before tags were namespaced are still installable.
-// Stranding whoever is running one would be worse than the bug this
-// fixes.
 func TestLegacyUnprefixedReleasesStayReachable(t *testing.T) {
 	if tagPrefix == "" {
 		t.Skip("no prefix, so nothing is legacy")
@@ -148,8 +129,7 @@ func TestDraftsAndPrereleasesAreSkipped(t *testing.T) {
 	}
 }
 
-// The prefix must not reach semver, or every release reads as a
-// downgrade and `update` never offers anything.
+// The prefix must not reach semver, or every release reads as a downgrade.
 func TestTheVersionComparedHasNoPrefix(t *testing.T) {
 	if got := releaseVersion(tagPrefix + "v1.2.3"); got != "v1.2.3" {
 		t.Errorf("releaseVersion(%q) = %q, want v1.2.3", tagPrefix+"v1.2.3", got)

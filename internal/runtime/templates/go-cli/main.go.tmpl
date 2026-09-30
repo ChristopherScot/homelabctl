@@ -1,24 +1,14 @@
 // {{ .Name }}
 package main
 
-// THIS WHOLE REPO IS YOURS. A CLI has no config.yaml, so `regen`,
-// `render`, `check` and `vault` do not apply to it - `init` scaffolded
-// these files once and nothing rewrites any of them. Edit freely.
+// THIS WHOLE REPO IS YOURS. Nothing rewrites these files after `init`.
+// Two couplings survive that:
 //
-// Two couplings survive that, and neither is checked at build time:
-//
-//   - VERSION drives releases. CI publishes only when its first line
-//     changes on main, tagging what it says. Bump it in the commit that
-//     should ship; a change without one builds and releases nothing.
+//   - VERSION drives releases: CI publishes only when its first line
+//     changes on main, tagging what it says.
 //   - update.go downloads `{{ .Name }}_<os>_<arch>.tar.gz` from the
-//     latest GitHub release. CI builds assets with exactly that name.
-//     Rename either side and self-update fails against a release that
-//     looks fine on GitHub - so change both together, or neither.
-//
-// Because nothing regenerates this, a later convention change in
-// homelabctl will not reach it. That is the trade for the repo being
-// yours: `init` is a starting point, not a template you stay attached
-// to.
+//     latest GitHub release; CI builds assets with exactly that name.
+//     Rename either side and self-update fails.
 
 import (
 	"fmt"
@@ -27,23 +17,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is set at build time via ldflags; "dev" for local builds, which
-// deliberately refuse to self-update.
+// Version is set at build time via ldflags; "dev" refuses to self-update.
 var Version = "dev"
 
 func rootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "{{ .Name }}",
-		Short: "{{ .Name }}",
-		// Usage on every error buries the error itself; cobra still prints
-		// usage for genuine usage mistakes.
+		Use:          "{{ .Name }}",
+		Short:        "{{ .Name }}",
 		SilenceUsage: true,
 	}
 	root.AddCommand(updateCmd(), versionCmd())
 
-	// Cobra builds its own `completion` command during Execute, so it does
-	// not exist yet here and cannot be extended in place. Force it to be
-	// created now, then hang `install` off it.
+	// Cobra builds `completion` during Execute, so force it to exist now
+	// and hang `install` off it.
 	root.InitDefaultCompletionCmd()
 	for _, c := range root.Commands() {
 		if c.Name() == "completion" {
@@ -71,12 +57,8 @@ func main() {
 	}
 }
 
-// makeCompleter turns a function that lists names into a cobra completion
-// function. Completions run on every TAB, so keep the lookup fast and fail
-// quietly - returning ShellCompDirectiveError rather than nothing stops the
-// shell falling back to offering filenames, which looks like a bug.
-//
-//	cmd.ValidArgsFunction = makeCompleter(listThings)
+// makeCompleter returns ShellCompDirectiveError rather than nothing so the
+// shell does not fall back to filenames, which would look like a bug.
 func makeCompleter(list func() ([]string, error)) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 		if len(args) != 0 {
