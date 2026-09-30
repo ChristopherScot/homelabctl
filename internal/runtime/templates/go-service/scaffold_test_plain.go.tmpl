@@ -23,9 +23,9 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	return w
 }
 
-// The probe path in deploy/config.yaml. Without a spec, nothing generates
-// this endpoint - so this test is what keeps a hand-edited server.go from
-// silently removing the thing the readinessProbe depends on.
+// The probe path in deploy/config.yaml. Without a spec, nothing
+// generates this endpoint - so this test keeps a hand-edited server.go
+// from silently removing what the readinessProbe depends on.
 func TestHealthIsServedForTheProbe(t *testing.T) {
 	w := get(t, newHandler(t), "/health")
 	if w.Code != http.StatusOK {
@@ -48,7 +48,7 @@ func TestRootIdentifiesTheService(t *testing.T) {
 
 func TestMetricsAreExposed(t *testing.T) {
 	h := newHandler(t)
-	get(t, h, "/") // a request to record
+	get(t, h, "/")
 
 	w := get(t, h, "/metrics")
 	if w.Code != http.StatusOK {
@@ -63,12 +63,10 @@ func TestMetricsAreExposed(t *testing.T) {
 	}
 }
 
-// Without a generated router there is nothing rejecting unrouted requests
-// before they reach the middleware, so this is the test that has to hold
-// the line: every metric label is a literal written in server.go.
-//
-// If you add a route with a path parameter, label it by its PATTERN
-// ("slug"), never by the value.
+// Without a generated router rejecting unrouted requests, this is the
+// test holding the line: every metric label is a literal written in
+// server.go. If you add a route with a path parameter, label it by its
+// PATTERN, never by the value.
 func TestRequestPathNeverBecomesALabel(t *testing.T) {
 	h := newHandler(t)
 	get(t, h, "/secret-token-value/deadbeef")
@@ -79,12 +77,9 @@ func TestRequestPathNeverBecomesALabel(t *testing.T) {
 }
 
 
-// The client floor, which is off unless MIN_VERSION is set.
-//
-// Every case that FAILS OPEN matters more than the one that refuses:
-// the kubelet, Alloy and curl all send no version, and a floor that
-// blocked them would turn a client problem into an outage of this
-// service.
+// The client floor, off unless MIN_VERSION is set. Every FAIL OPEN case
+// matters more than the refusal - the kubelet, Alloy and curl all send
+// no version.
 func TestClientFloor(t *testing.T) {
 	for _, tc := range []struct {
 		name, floor, sent string
@@ -120,12 +115,10 @@ func TestClientFloor(t *testing.T) {
 	}
 }
 
-// The kubelet sends no Client-Version. If a raised floor blocked
-// /healthz the pod would fail its probes and crashloop - a client
-// problem turned into an outage of the service itself.
+// A raised floor must not crash-loop probes.
 func TestProbesSurviveAnImpossibleFloor(t *testing.T) {
 	old := minVersion
-	minVersion = "99.99.99" // nothing can clear this
+	minVersion = "99.99.99"
 	defer func() { minVersion = old }()
 
 	h, err := handler()
@@ -144,9 +137,8 @@ func TestProbesSurviveAnImpossibleFloor(t *testing.T) {
 	}
 }
 
-// /metrics is the platform's endpoint, scraped by Alloy. A version is
-// sent on purpose here: without one, fail-open would pass whether or
-// not /metrics is excluded, and the test would prove nothing.
+// A version is sent on purpose: without one, fail-open would pass
+// whether or not /metrics is excluded.
 func TestMetricsIsOutsideTheFloor(t *testing.T) {
 	old := minVersion
 	minVersion = "9.9.9"

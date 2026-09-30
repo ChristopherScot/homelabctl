@@ -1,12 +1,11 @@
-# The API contract. This file is the source of truth: `go generate`
-# turns it into the server interface, request/response types, validation
-# and a typed client, and the compiler then refuses to build until the
-# handlers match. Change the API here, not in Go.
+# The API contract. `go generate` turns this into the server interface,
+# request/response types, validation and a typed client; the compiler
+# then refuses to build until the handlers match.
 openapi: 3.0.3
 info:
   title: {{ .Name }}
-  # Bump this when the API changes. The generated client reports it in
-  # Client-Version, so one version covers the API and its clients.
+  # Bump on every API change; the generated client reports it in
+  # Client-Version.
   version: {{ .SpecVersion }}
   description: {{ .Name }}, owned by {{ .Team }}.
 
@@ -66,10 +65,9 @@ components:
         version:
           type: string
 
-    # Declaring a `default` response with this shape is what lets ogen
-    # generate convenient errors: a handler can return a plain error and
-    # the generated code renders it, instead of every operation needing
-    # its own error union.
+    # A `default` response with this shape lets ogen generate convenient
+    # errors: a handler can return a plain error rather than every
+    # operation defining its own error union.
     Error:
       type: object
       required: [message]

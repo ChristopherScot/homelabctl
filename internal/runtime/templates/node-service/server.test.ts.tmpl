@@ -3,8 +3,7 @@ import assert from 'node:assert/strict'
 
 import { app, floor } from './server.ts'
 
-// app.inject() drives the real routes and hooks without binding a port,
-// so these are fast and need no cleanup between cases.
+// app.inject() drives the real routes and hooks without binding a port.
 after(() => app.close())
 
 test('healthz reports ok', async () => {
@@ -29,19 +28,14 @@ test('metrics are exposed in Prometheus format', async () => {
   const res = await app.inject({ method: 'GET', url: '/metrics' })
 
   assert.equal(res.statusCode, 200)
-  // String(), because a header can be absent and strict mode says so -
-  // res.headers['content-type'] is string | undefined, and assert.match
-  // would throw on undefined rather than fail with something readable.
+  // String() because a header can be absent; assert.match would throw
+  // on undefined rather than fail readably.
   assert.match(String(res.headers['content-type']), /text\/plain/)
-  // The counter the deployment's scrape annotation exists to collect.
   assert.match(res.body, /http_requests_total\{[^}]*route="\/"/)
-  // prom-client's process and heap metrics.
   assert.match(res.body, /nodejs_heap_size_total_bytes/)
 })
 
-// The route label is what reaches the log aggregator and the metric
-// labels. A raw URL there would write out whatever a caller put in the
-// path - a token, an id - and give Prometheus unbounded cardinality.
+// A raw URL as a label would write out caller-controlled path segments.
 test('an unrouted path is never used as a label', async () => {
   await app.inject({ method: 'GET', url: '/secret-token-value/deadbeef' })
   const res = await app.inject({ method: 'GET', url: '/metrics' })
@@ -50,12 +44,8 @@ test('an unrouted path is never used as a label', async () => {
   assert.match(res.body, /http_requests_total\{[^}]*route="other"/)
 })
 
-// The client floor, which is off unless MIN_VERSION is set.
-//
-// Every case that FAILS OPEN matters more than the one that refuses:
-// the kubelet, Alloy and curl all send no version, and a floor that
-// blocked them would turn a client problem into an outage of this
-// service.
+// The client floor, off unless MIN_VERSION is set. Every FAIL OPEN case
+// matters more than the refusal.
 test('the client floor refuses only what it should', async () => {
   const cases: Array<[string, string, string, number]> = [
     ['no floor set', '', '0.1.0', 200],
@@ -82,11 +72,8 @@ test('the client floor refuses only what it should', async () => {
   }
 })
 
-// The kubelet sends no client-version. If a raised floor blocked
-// /healthz the pod would fail its probes and crashloop - a client
-// problem turned into an outage of the service itself. /metrics is the
-// same: Alloy scrapes it and would go blind exactly when a floor is
-// raised.
+// If a raised floor blocked /healthz the pod would fail probes and
+// crashloop. Alloy is the same for /metrics.
 test('probes and metrics survive an impossible floor', async () => {
   const was = floor.minVersion
   floor.minVersion = '99.99.99'
