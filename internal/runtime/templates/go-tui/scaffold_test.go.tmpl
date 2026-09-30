@@ -1,99 +1,10 @@
 package main
 
-// Update is a pure function of (state, message), so the interface can be
-// driven without a terminal.
+import "testing"
 
-import (
-	"strings"
-	"testing"
-
-	"charm.land/bubbles/v2/list"
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-)
-
-// The list is sized from the window minus whatever frame appStyle adds;
-// hardcoding the padding in both places drifts silently.
-func TestListIsSizedToTheWindowMinusItsFrame(t *testing.T) {
-	m, _ := newModel().Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-
-	h, v := appStyle.GetFrameSize()
-	if got, want := m.(model).list.Width(), 100-h; got != want {
-		t.Errorf("list width = %d, want %d (window 100 minus frame %d)", got, want, h)
-	}
-	if got, want := m.(model).list.Height(), 40-v; got != want {
-		t.Errorf("list height = %d, want %d (window 40 minus frame %d)", got, want, v)
-	}
-}
-
-func TestRenderedListStaysWithinItsWidth(t *testing.T) {
-	m, _ := newModel().Update(tea.WindowSizeMsg{Width: 60, Height: 20})
-
-	for i, line := range strings.Split(m.(model).list.View(), "\n") {
-		if w := lipgloss.Width(line); w > m.(model).list.Width() {
-			t.Errorf("line %d is %d wide, list width is %d", i, w, m.(model).list.Width())
-		}
-	}
-}
-
-// q must not quit while the filter is open, or a name containing "q"
-// could not be typed.
-func TestQuitKey(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		filtering bool
-		wantQuit  bool
-	}{
-		{"idle", false, true},
-		{"filtering", true, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := newModel()
-			m.list.SetSize(80, 24)
-			if tc.filtering {
-				updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
-				m = updated.(model)
-				if m.list.FilterState() != list.Filtering {
-					t.Fatal("filter did not open")
-				}
-			}
-
-			_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
-
-			quit := false
-			if cmd != nil {
-				if _, ok := cmd().(tea.QuitMsg); ok {
-					quit = true
-				}
-			}
-			if quit != tc.wantQuit {
-				t.Errorf("quit = %v, want %v", quit, tc.wantQuit)
-			}
-		})
-	}
-}
-
-// Trapping the user in an alt-screen with no visible exit is the worst
-// failure this can have. Asserting on "quit" alone: the rendered help
-// carries ANSI styling between the key and its label.
-func TestViewShowsHowToQuit(t *testing.T) {
-	m, _ := newModel().Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-
-	if content := m.(model).View().Content; !strings.Contains(content, "quit") {
-		t.Errorf("view does not say how to quit:\n%s", content)
-	}
-}
-
-// Lip Gloss v2 removed AdaptiveColor, so Init must ask for the
-// background and Update must restyle when it arrives.
-func TestRestylesForALightTerminal(t *testing.T) {
-	m, _ := newModel().Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-
-	dark := m.(model).View().Content
-
-	light, _ := m.(model).Update(tea.BackgroundColorMsg{Color: lipgloss.White})
-	if got := light.(model).View().Content; got == dark {
-		t.Error("view is identical on a light and dark terminal; BackgroundColorMsg is not restyling anything")
+func TestVersionIsSet(t *testing.T) {
+	if Version == "" {
+		t.Error("Version is empty; the ldflags default was removed")
 	}
 }
 

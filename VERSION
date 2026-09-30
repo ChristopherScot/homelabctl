@@ -1,5 +1,6 @@
-v1.18.24
+v1.18.25
 
+v1.18.25 scaffold tests survive a service extending the model shape
 v1.18.24 templates: strip comments to the WHYs, drain retry response bodies
 v1.18.23 readiness and liveness can be different endpoints
 v1.18.22 render refreshes config.schema.json, so the CLI and CI agree

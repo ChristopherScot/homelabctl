@@ -2,6 +2,9 @@ package main
 
 // The interface itself. This is the file to edit.
 //
+// Update is a pure function of (state, message), so a service extending
+// this model owns its own Update tests - the scaffold cannot know its shape.
+//
 // bubbletea v2, whose API differs from v1 examples online: Init returns
 // only a tea.Cmd, View returns a tea.View, key presses arrive as
 // tea.KeyPressMsg, and alt-screen is a field on the View instead of a

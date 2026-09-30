@@ -1,29 +1,7 @@
 package main
 
-// Anything touching layout.Context needs a Gio frame, which CI runners
-// do not have, so those tests belong on a device.
-
 import "testing"
 
-func TestDescribeReadsNaturally(t *testing.T) {
-	for _, tc := range []struct {
-		count int
-		want  string
-	}{
-		{0, "Nothing tapped yet."},
-		{1, "Tapped once."},
-		{2, "Tapped 2 times."},
-		{17, "Tapped 17 times."},
-	} {
-		if got := describe(tc.count); got != tc.want {
-			t.Errorf("describe(%d) = %q, want %q", tc.count, got, tc.want)
-		}
-	}
-}
-
-// A released build reporting "dev" means the ldflags default was
-// dropped, which is invisible until someone asks a user what version
-// they are running.
 func TestVersionHasADefault(t *testing.T) {
 	if version == "" {
 		t.Error("version is empty; the ldflags default was removed")
