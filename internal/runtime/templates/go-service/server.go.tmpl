@@ -117,7 +117,8 @@ const (
 
 // minVersion is the oldest client this service answers, from MIN_VERSION.
 // Empty means no floor. Read at startup rather than compiled in, so
-// raising the floor is a config edit and a restart.
+// raising the floor is a config edit and a restart. If you drop this
+// floor, also delete scaffold_floor_test.go.
 var minVersion = os.Getenv("MIN_VERSION")
 
 // tooOld reports whether a caller is below the floor. FAILS OPEN on
