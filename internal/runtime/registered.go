@@ -40,6 +40,8 @@ func init() {
 			"paging.go.tmpl":      {dst: "api/paging.go", specOnly: true, regen: true},
 			"paging_test.go.tmpl": {dst: "api/paging_test.go", specOnly: true, regen: true},
 
+			"scaffold_floor_test.go.tmpl": {dst: "scaffold_floor_test.go", plain: "scaffold_floor_test_plain.go.tmpl"},
+
 			// The TypeScript client. Its package.json sits WITH the code
 			// it describes rather than at the service root: it used to be
 			// at the root so `npm install github:owner/repo` could find
