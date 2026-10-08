@@ -26,7 +26,12 @@ func checkCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "check [dir]",
 		Short: "fail on deploy misconfigurations that are otherwise silent",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Fail on deploy misconfigurations that Argo would otherwise report
+Synced/Healthy while nothing ships. Catches an ESO API version that
+no longer matches what the cluster serves, a kustomization.yaml that
+references a missing file, and an OpenAPI spec whose generated
+clients have fallen behind.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			// An explicit directory wins; `check deploy` is in every
 			// generated workflow and has to keep working.
