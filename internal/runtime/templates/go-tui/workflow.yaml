@@ -28,7 +28,7 @@ jobs:
 {{ .BuildSteps }}
   release:
     # Only when VERSION changed, and only from main.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       # grep -qx against the full path. A bare `VERSION` never matches
       # in a monorepo, where the file is services/<name>/VERSION - so the
@@ -46,11 +46,24 @@ jobs:
       - name: Release only on a VERSION change
         id: gate
         run: |
-          if git diff --name-only HEAD~1 HEAD | grep -qx '{{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION'; then
-            echo "go=true" >> $GITHUB_OUTPUT
+          # A manual run always releases: that is what the trigger is for.
+          # The shell env var, not a GitHub expression: this file is itself
+          # a Go template, which would try to evaluate the braces.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            go=true
+          # A repo's FIRST commit has no parent, so HEAD~1 does not resolve and
+          # git diff fails - which read as "VERSION did not change" and left a
+          # freshly scaffolded repo unable to release until some later commit
+          # happened to touch the file. That first commit is the one that
+          # introduces VERSION, so it always qualifies.
+          elif ! git rev-parse --verify --quiet HEAD~1 >/dev/null; then
+            go=true
+          elif git diff --name-only HEAD~1 HEAD | grep -qx '{{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION'; then
+            go=true
           else
-            echo "go=false" >> $GITHUB_OUTPUT
+            go=false
           fi
+          echo "go=$go" >> $GITHUB_OUTPUT
 
       - uses: actions/setup-go@v5
         if: steps.gate.outputs.go == 'true'

@@ -2058,3 +2058,50 @@ func TestMakeBuildProducesABinary(t *testing.T) {
 		})
 	}
 }
+
+// A scaffolded repo must be able to release from its FIRST commit, which
+// is the only commit that has no parent. The gate was
+// `git diff --name-only HEAD~1 HEAD`, and on a parentless commit HEAD~1
+// does not resolve, git diff fails, grep matches nothing, and the gate
+// reports "no VERSION change" - so `homelabctl init` produced a repo that
+// silently could not release until some later commit happened to touch
+// VERSION. Reported from ChristopherScot/nvdiff, whose first push carried
+// VERSION=v0.1.0 and a green CI run that published nothing.
+//
+// This is the same shape as the monorepo bug above: a gate that stays
+// shut is indistinguishable from a commit that did not bump the version.
+func TestReleaseGateOpensOnAParentlessCommit(t *testing.T) {
+	for _, name := range []string{"go-cli", "go-tui", "go-mobile"} {
+		r, err := Get(name)
+		if err != nil {
+			t.Fatalf("runtime %q: %v", name, err)
+		}
+		a := r.Artifacts(testParams())
+		if a.Workflow == "" {
+			continue // runtime ships no workflow
+		}
+		if !strings.Contains(a.Workflow, "rev-parse --verify --quiet HEAD~1") {
+			t.Errorf("%s: release gate does not handle a first commit; HEAD~1 does not resolve there, so a freshly scaffolded repo can never release", name)
+		}
+	}
+}
+
+// workflow_dispatch is declared as a trigger, so it has to actually be
+// able to cut a release. The job-level condition pinned the release to
+// github.event_name == 'push', which left the manual trigger able to run
+// the workflow but never to publish anything.
+func TestReleaseJobAcceptsManualDispatch(t *testing.T) {
+	for _, name := range []string{"go-cli", "go-tui", "go-mobile"} {
+		r, err := Get(name)
+		if err != nil {
+			t.Fatalf("runtime %q: %v", name, err)
+		}
+		a := r.Artifacts(testParams())
+		if a.Workflow == "" || !strings.Contains(a.Workflow, "workflow_dispatch") {
+			continue
+		}
+		if strings.Contains(a.Workflow, "if: github.event_name == 'push' && github.ref") {
+			t.Errorf("%s: release job excludes workflow_dispatch, so the declared manual trigger can never release", name)
+		}
+	}
+}
