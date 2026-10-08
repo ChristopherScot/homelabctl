@@ -176,6 +176,25 @@ func normalise(s string) string {
 // rendered twice - and a diff that reports a file as changed while
 // printing nothing is worse than printing no diff at all. So this does a
 // real longest-common-subsequence walk, which gets duplicates right.
+// printRawDiff prints a unified-style diff of two bodies LITERALLY -
+// comments and blank lines included.
+//
+// printDiff normalises both sides first, which is right for comparing a
+// rendered manifest against a deployed one: there, a comment is noise.
+// It is wrong for showing what an --overwrite is about to destroy, where
+// a dropped line next to a comment block is exactly the thing worth
+// seeing. pokedex-web lost its `COPY ... dist/assets` that way and
+// crashlooped for a week.
+func printRawDiff(oldBody, newBody string) {
+	old := strings.Split(strings.TrimRight(oldBody, "\n"), "\n")
+	nw := strings.Split(strings.TrimRight(newBody, "\n"), "\n")
+	for _, h := range textdiff.Hunks(old, nw) {
+		for _, line := range h {
+			fmt.Printf("  %s\n", line)
+		}
+	}
+}
+
 func printDiff(oldBody, newBody string) {
 	old := strings.Split(normalise(oldBody), "\n")
 	nw := strings.Split(normalise(newBody), "\n")

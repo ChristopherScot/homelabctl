@@ -748,3 +748,81 @@ func TestRenderRefreshesAStaleSchema(t *testing.T) {
 		t.Error("render left a stale schema: the CLI would accept a config CI rejects")
 	}
 }
+
+// --overwrite replaces a file the service may have edited, so it has to
+// say what is being lost and get a yes for it. It printed nothing and
+// asked nothing: pokedex-web's Dockerfile lost its
+// `COPY ... dist/assets ./assets` to a template regen that way, and the
+// pod crashlooped 1805 times over a week while the previous ReplicaSet
+// kept serving, so nothing paged.
+//
+// Driven with yes:false and no stdin, which is what a refusal looks
+// like: the read returns EOF, that is not "y", and the file survives.
+func TestOverwriteWithoutConfirmationLeavesTheFileAlone(t *testing.T) {
+	dir := t.TempDir()
+	mine := filepath.Join(dir, "main.go")
+	const body = "// mine, and not what the template would write\n"
+	if err := os.WriteFile(mine, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	o := initOpts{
+		name: "svc", runtimeID: "go-service",
+		owner: "o", localOnly: true, skipTidy: true,
+		overwrite: map[string]bool{"main.go": true},
+	}
+	c := config.Defaults()
+	c.Name, c.Team, c.Runtime = o.name, defaultTeam, o.runtimeID
+	c.Image = config.Image{Repository: "ghcr.io/o/svc"}
+	if err := c.Complete(); err != nil {
+		t.Fatal(err)
+	}
+	r, err := runtime.Get(o.runtimeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = setupLocal(o, &c, r, dir)
+	if err == nil {
+		t.Fatal("an unconfirmed --overwrite succeeded; it must abort")
+	}
+	if !strings.Contains(err.Error(), "main.go") {
+		t.Errorf("abort should name the file it stopped at, got %v", err)
+	}
+	if got, _ := os.ReadFile(mine); string(got) != body {
+		t.Error("file was rewritten despite the overwrite not being confirmed")
+	}
+}
+
+// Identical content is a no-op, not a question: a service that has not
+// diverged from the template should not be prompted about a rewrite that
+// changes nothing.
+func TestOverwriteOfUnchangedContentAsksNothing(t *testing.T) {
+	dir := t.TempDir()
+
+	o := initOpts{
+		name: "svc", runtimeID: "go-service",
+		owner: "o", localOnly: true, yes: true, skipTidy: true,
+	}
+	c := config.Defaults()
+	c.Name, c.Team, c.Runtime = o.name, defaultTeam, o.runtimeID
+	c.Image = config.Image{Repository: "ghcr.io/o/svc"}
+	if err := c.Complete(); err != nil {
+		t.Fatal(err)
+	}
+	r, err := runtime.Get(o.runtimeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// First run scaffolds everything.
+	if err := setupLocal(o, &c, r, dir); err != nil {
+		t.Fatal(err)
+	}
+	// Second run names a file for overwrite whose content is unchanged.
+	// With yes:false this would block on a prompt if one were asked.
+	o.overwrite = map[string]bool{"main.go": true}
+	o.yes = false
+	if err := setupLocal(o, &c, r, dir); err != nil {
+		t.Fatalf("rewriting identical content should not prompt or fail: %v", err)
+	}
+}
