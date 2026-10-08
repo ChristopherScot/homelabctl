@@ -163,7 +163,8 @@ func TestMonorepoCLIWorkflowIsScopedToItsDirectory(t *testing.T) {
 	for _, want := range []string{
 		"services/svc/**",                 // path filter
 		"working-directory: services/svc", // tests and build run there
-		"grep -qx 'services/svc/VERSION'", // the release gate can open
+		"head -n1 services/svc/VERSION",   // the gate reads the right VERSION
+		`tag="svc/$version"`,              // and namespaces the tag to this service
 		"go-version-file: services/svc/go.mod",
 		"services/svc/checksums.txt", // assets are found where built
 	} {
@@ -179,8 +180,11 @@ func TestSingleRepoCLIWorkflowStaysAtTheRoot(t *testing.T) {
 	r, _ := Get("go-cli")
 	a := r.Artifacts(testParams()) // no PathFilter
 
-	if !strings.Contains(a.Workflow, "grep -qx 'VERSION'") {
-		t.Error("single-repo CLI should gate on a bare VERSION")
+	if !strings.Contains(a.Workflow, "head -n1 VERSION") {
+		t.Error("single-repo CLI should read a bare VERSION")
+	}
+	if !strings.Contains(a.Workflow, `tag="$version"`) {
+		t.Error("single-repo CLI tag should not be namespaced")
 	}
 	// Checked against non-comment lines only: the workflow explains the
 	// monorepo case in a comment, and matching that would be testing the
@@ -2059,18 +2063,19 @@ func TestMakeBuildProducesABinary(t *testing.T) {
 	}
 }
 
-// A scaffolded repo must be able to release from its FIRST commit, which
-// is the only commit that has no parent. The gate was
-// `git diff --name-only HEAD~1 HEAD`, and on a parentless commit HEAD~1
-// does not resolve, git diff fails, grep matches nothing, and the gate
-// reports "no VERSION change" - so `homelabctl init` produced a repo that
-// silently could not release until some later commit happened to touch
+// A scaffolded repo must be able to release from its first commit, and
+// the gate must not depend on git history to decide that.
+//
+// It used to: `git diff --name-only HEAD~1 HEAD | grep -qx VERSION`, which
+// on a parentless commit cannot resolve HEAD~1, fails, matches nothing and
+// reports "VERSION did not change" - about the one commit that introduces
 // VERSION. Reported from ChristopherScot/nvdiff, whose first push carried
 // VERSION=v0.1.0 and a green CI run that published nothing.
 //
-// This is the same shape as the monorepo bug above: a gate that stays
-// shut is indistinguishable from a commit that did not bump the version.
-func TestReleaseGateOpensOnAParentlessCommit(t *testing.T) {
+// The fix was not a fourth special case. The gate now asks GitHub whether
+// the tag exists, so there is no history to walk and nothing to get wrong
+// about its shape.
+func TestReleaseGateDoesNotDependOnGitHistory(t *testing.T) {
 	for _, name := range []string{"go-cli", "go-tui", "go-mobile"} {
 		r, err := Get(name)
 		if err != nil {
@@ -2078,10 +2083,22 @@ func TestReleaseGateOpensOnAParentlessCommit(t *testing.T) {
 		}
 		a := r.Artifacts(testParams())
 		if a.Workflow == "" {
-			continue // runtime ships no workflow
+			continue
 		}
-		if !strings.Contains(a.Workflow, "rev-parse --verify --quiet HEAD~1") {
-			t.Errorf("%s: release gate does not handle a first commit; HEAD~1 does not resolve there, so a freshly scaffolded repo can never release", name)
+		var live []string
+		for _, l := range strings.Split(a.Workflow, "\n") {
+			if t := strings.TrimSpace(l); t != "" && !strings.HasPrefix(t, "#") {
+				live = append(live, l)
+			}
+		}
+		yaml := strings.Join(live, "\n")
+		for _, banned := range []string{"HEAD~1", "git diff", "fetch-depth"} {
+			if strings.Contains(yaml, banned) {
+				t.Errorf("%s: release gate still reads git history (%q); a first commit has none", name, banned)
+			}
+		}
+		if !strings.Contains(yaml, "gh release view") {
+			t.Errorf("%s: gate should ask GitHub whether the release exists", name)
 		}
 	}
 }

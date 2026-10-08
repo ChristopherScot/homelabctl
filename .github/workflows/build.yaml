@@ -40,33 +40,34 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       # grep -qx against the full path. A bare `VERSION` never matches
       # in a monorepo, where the file is services/<name>/VERSION - so the
       # gate stayed closed forever and no release could be cut, silently,
       # because a gate that does not open looks the same as a commit that
       # did not bump the version.
-      - name: Release only on a VERSION change
+      # Ask GitHub whether this version is already released, instead of
+      # predicting from git history whether it ought to be. The old gate
+      # could not open on a first commit (HEAD~1 does not resolve) or on a
+      # workflow_dispatch run, and both failed silently - a gate that does
+      # not open looks exactly like a commit that did not bump the version.
+      # This is how Clever's wag does it: attempt the release, treat
+      # "already exists" as success.
+      - name: Release unless this version is already published
         id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # A manual run always releases: that is what the trigger is for.
-          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
-            go=true
-          # A repo's FIRST commit has no parent, so HEAD~1 does not resolve and
-          # git diff fails - which read as "VERSION did not change" and left a
-          # freshly scaffolded repo unable to release until some later commit
-          # happened to touch the file. That first commit is the one that
-          # introduces VERSION, so it always qualifies.
-          elif ! git rev-parse --verify --quiet HEAD~1 >/dev/null; then
-            go=true
-          elif git diff --name-only HEAD~1 HEAD | grep -qx 'VERSION'; then
-            go=true
-          else
+          version=$(head -n1 VERSION)
+          if gh release view "$version" >/dev/null 2>&1; then
+            echo "release already exists for $version"
             go=false
+          else
+            echo "no release for $version yet"
+            go=true
           fi
           echo "go=$go" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
 
       - uses: actions/setup-go@v5
         if: steps.gate.outputs.go == 'true'
@@ -74,12 +75,6 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
-
-      - name: Read version
-        if: steps.gate.outputs.go == 'true'
-        id: v
-        run: echo "version=$(head -n1 VERSION)" >> $GITHUB_OUTPUT
-
       # Asset names must match what `homelabctl update` looks for:
       # homelabctl_<goos>_<goarch>.tar.gz containing the bare binary.
       # Version is injected here; without it a released binary reports
@@ -87,7 +82,7 @@ jobs:
       - name: Cross-compile
         if: steps.gate.outputs.go == 'true'
         run: |
-          VERSION="${{ steps.v.outputs.version }}"
+          VERSION="${{ steps.gate.outputs.version }}"
           LDFLAGS="-s -w -X main.Version=$VERSION"
           for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
             GOOS="${target%/*}"; GOARCH="${target#*/}"
@@ -100,7 +95,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: steps.gate.outputs.go == 'true'
         with:
-          tag_name: ${{ steps.v.outputs.version }}
+          tag_name: ${{ steps.gate.outputs.version }}
           files: |
             homelabctl_*.tar.gz
             checksums.txt

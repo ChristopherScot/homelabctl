@@ -27,7 +27,8 @@ jobs:
       - uses: actions/checkout@v4
 {{ .BuildSteps }}
   release:
-    # Only when VERSION changed, and only from main.
+    # Every push to main, and any manual run; the step below
+    # decides whether there is actually a new version to publish.
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: test
     runs-on: ubuntu-latest
@@ -35,35 +36,39 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # grep -qx against the full path. A bare `VERSION` never matches
-      # in a monorepo, where the file is services/<name>/VERSION - so the
-      # gate stayed closed forever and no release could be cut, silently,
-      # because a gate that does not open looks the same as a commit that
-      # did not bump the version.
-      - name: Release only on a VERSION change
+      # Ask GitHub whether this version is already released, instead of
+      # predicting from git history whether it ought to be.
+      #
+      # The old gate was `git diff --name-only HEAD~1 HEAD | grep -qx VERSION`
+      # and it was wrong three separate times: the path never matched in a
+      # monorepo, HEAD~1 does not resolve on a first commit, and a
+      # workflow_dispatch run is not a push. All three failed the same way -
+      # the gate stayed shut, no release was cut, and nothing said so, because
+      # a gate that does not open looks exactly like a commit that did not bump
+      # the version.
+      #
+      # Asking the registry has none of those cases. There is no history to
+      # walk, so there is nothing to get wrong about the shape of it, and a
+      # false negative cannot persist: if the release is missing, the next push
+      # to main cuts it. This is how Clever's wag does it - attempt the
+      # release, treat "already exists" as success.
+      - name: Release unless this version is already published
         id: gate
+        env:
+          GH_TOKEN: ${{ "{{" }} github.token {{ "}}" }}
         run: |
-          # A manual run always releases: that is what the trigger is for.
-          # The shell env var, not a GitHub expression: this file is itself
-          # a Go template, which would try to evaluate the braces.
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            go=true
-          # A repo's FIRST commit has no parent, so HEAD~1 does not resolve and
-          # git diff fails - which read as "VERSION did not change" and left a
-          # freshly scaffolded repo unable to release until some later commit
-          # happened to touch the file. That first commit is the one that
-          # introduces VERSION, so it always qualifies.
-          elif ! git rev-parse --verify --quiet HEAD~1 >/dev/null; then
-            go=true
-          elif git diff --name-only HEAD~1 HEAD | grep -qx '{{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION'; then
-            go=true
-          else
+          version=$(head -n1 {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION)
+          tag="{{ if .PathFilter }}{{ .Name }}/{{ end }}$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release already exists for $tag"
             go=false
+          else
+            echo "no release for $tag yet"
+            go=true
           fi
           echo "go=$go" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
 
       - uses: actions/setup-go@v5
         if: steps.gate.outputs.go == 'true'
@@ -71,12 +76,6 @@ jobs:
           go-version-file: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.mod
           cache: true
           cache-dependency-path: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.sum
-
-      - name: Read version
-        if: steps.gate.outputs.go == 'true'
-        id: v
-        run: echo "version=$(head -n1 {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION)" >> $GITHUB_OUTPUT
-
       # Asset names must match what `{{ .Name }} update` looks for:
       # {{ .Name }}_<goos>_<goarch>.tar.gz containing the bare binary.
       # Version is injected here; without it a released binary reports
@@ -85,7 +84,7 @@ jobs:
         if: steps.gate.outputs.go == 'true'{{ if .PathFilter }}
         working-directory: {{ .PathFilter }}{{ end }}
         run: |
-          VERSION="${{ "{{" }} steps.v.outputs.version {{ "}}" }}"
+          VERSION="${{ "{{" }} steps.gate.outputs.version {{ "}}" }}"
           LDFLAGS="-s -w -X main.Version=$VERSION"
           for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
             GOOS="${target%/*}"; GOARCH="${target#*/}"
@@ -104,7 +103,7 @@ jobs:
           # two services reaching the same number attached their assets
           # to ONE release where the second checksums.txt overwrote the
           # first. A dedicated repo has one release line, so no prefix.
-          tag_name: {{ if .PathFilter }}{{ .Name }}/{{ end }}${{ "{{" }} steps.v.outputs.version {{ "}}" }}
+          tag_name: {{ if .PathFilter }}{{ .Name }}/{{ end }}${{ "{{" }} steps.gate.outputs.version {{ "}}" }}
           files: |
             {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}{{ .Name }}_*.tar.gz
             {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}checksums.txt

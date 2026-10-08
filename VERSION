@@ -1,7 +1,7 @@
 v1.18.28
 
+v1.18.28 the release gate asks GitHub instead of guessing from git history
 v1.18.27 `check --help` names what it catches
-v1.18.28 a scaffolded repo can release from its first commit
 v1.18.26 go-service scaffold tests survive a service dropping MIN_VERSION; node-service vite config preserves symlinks for file: deps
 v1.18.25 scaffold tests survive a service extending the model shape
 v1.18.24 templates: strip comments to the WHYs, drain retry response bodies
