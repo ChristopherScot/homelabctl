@@ -86,18 +86,23 @@ jobs:
 
           tag="{{ if .PathFilter }}{{ .Name }}/{{ end }}$version"
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-
+          # Only a definite 404 means "not released yet". An auth failure, a
+          # network blip or any other API error also exits non-zero, and
+          # treating those as not-found would re-release a version that already
+          # exists - and because softprops/action-gh-release UPDATES an existing
+          # release rather than failing, that silently overwrites published
+          # assets under a tag people have already installed. So anything that is
+          # not a clean yes or a clean 404 fails the job.
+          if out=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" 2>&1); then
             echo "release already exists for $tag"
-
             go=false
-
-          else
-
+          elif printf '%s' "$out" | grep -q '"message": *"Not Found"'; then
             echo "no release for $tag yet"
-
             go=true
-
+          else
+            echo "could not determine whether $tag is released:" >&2
+            printf '%s\n' "$out" >&2
+            exit 1
           fi
 
           echo "go=$go" >> $GITHUB_OUTPUT

@@ -2097,7 +2097,7 @@ func TestReleaseGateDoesNotDependOnGitHistory(t *testing.T) {
 				t.Errorf("%s: release gate still reads git history (%q); a first commit has none", name, banned)
 			}
 		}
-		if !strings.Contains(yaml, "gh release view") {
+		if !strings.Contains(yaml, "gh api") || !strings.Contains(yaml, "releases/tags/") {
 			t.Errorf("%s: gate should ask GitHub whether the release exists", name)
 		}
 	}
@@ -2119,6 +2119,53 @@ func TestReleaseJobAcceptsManualDispatch(t *testing.T) {
 		}
 		if strings.Contains(a.Workflow, "if: github.event_name == 'push' && github.ref") {
 			t.Errorf("%s: release job excludes workflow_dispatch, so the declared manual trigger can never release", name)
+		}
+	}
+}
+
+// The gate must open only on a definite "not released yet", never on any
+// other failure.
+//
+// `gh release view` exits non-zero for a missing release AND for an auth
+// failure, a network blip, or any API error - all indistinguishable by
+// exit code alone. Treating them alike re-releases a version that already
+// exists, and because softprops/action-gh-release UPDATES an existing
+// release rather than failing, that silently overwrites assets under a
+// tag people have already installed. A transient 401 would become a bad
+// release that nothing reports.
+//
+// Reported by the infra-95 session against 7bbfd05. Verified against the
+// real gh: a missing release returns {"message": "Not Found"}, bad
+// credentials returns {"message": "Bad credentials"}, and both exit 1.
+func TestReleaseGateFailsClosedOnAnErrorItCannotClassify(t *testing.T) {
+	for _, name := range []string{"go-cli", "go-tui", "go-mobile"} {
+		r, err := Get(name)
+		if err != nil {
+			t.Fatalf("runtime %q: %v", name, err)
+		}
+		a := r.Artifacts(testParams())
+		if a.Workflow == "" {
+			continue
+		}
+		var live []string
+		for _, l := range strings.Split(a.Workflow, "\n") {
+			if t := strings.TrimSpace(l); t != "" && !strings.HasPrefix(t, "#") {
+				live = append(live, l)
+			}
+		}
+		yaml := strings.Join(live, "\n")
+
+		// Opening the gate requires matching the 404 body explicitly...
+		if !strings.Contains(yaml, `"message": *"Not Found"`) {
+			t.Errorf("%s: gate does not require a definite Not Found to release", name)
+		}
+		// ...and anything unclassified has to stop the job.
+		if !strings.Contains(yaml, "exit 1") {
+			t.Errorf("%s: gate does not fail the job on an unclassifiable error", name)
+		}
+		// The bare form is what makes an auth error look like not-found.
+		if strings.Contains(yaml, `gh release view "$tag" >/dev/null 2>&1`) {
+			t.Errorf("%s: gate still treats any non-zero exit as not-released", name)
 		}
 	}
 }

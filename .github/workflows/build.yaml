@@ -59,12 +59,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(head -n1 VERSION)
-          if gh release view "$version" >/dev/null 2>&1; then
+          # Only a definite 404 means "not released yet". An auth failure
+          # or any other API error also exits non-zero, and treating those
+          # as not-found would re-release an existing version - which
+          # softprops/action-gh-release would silently apply as an UPDATE,
+          # overwriting published assets under a tag people installed.
+          if out=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$version" 2>&1); then
             echo "release already exists for $version"
             go=false
-          else
+          elif printf '%s' "$out" | grep -q '"message": *"Not Found"'; then
             echo "no release for $version yet"
             go=true
+          else
+            echo "could not determine whether $version is released:" >&2
+            printf '%s\n' "$out" >&2
+            exit 1
           fi
           echo "go=$go" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
