@@ -438,6 +438,22 @@ func confirm(o initOpts, c *config.Config, isCLI bool) error {
 	return nil
 }
 
+// confirmOverwrite asks before replacing a file the service may have
+// edited. --yes and --dry-run skip it, the same two that skip the
+// top-level prompt: scripted runs have already made the decision, and a
+// dry run writes nothing to decide about.
+func confirmOverwrite(o initOpts, path string) error {
+	if o.dryRun || o.yes {
+		return nil
+	}
+	fmt.Printf("overwrite %s? [y/N] ", path)
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	if s := strings.TrimSpace(strings.ToLower(line)); s != "y" && s != "yes" {
+		return fmt.Errorf("aborted at %s", path)
+	}
+	return nil
+}
+
 // setupRemote creates the repo if it does not exist and clones it,
 // returning the local directory. Both halves are skipped when already
 // present, so re-running is safe.
@@ -829,6 +845,25 @@ func setupLocal(o initOpts, c *config.Config, r runtime.Runtime, dir string) err
 			if !o.overwrite[path] {
 				skipped = append(skipped, path)
 				return nil
+			}
+			// Show what is about to be lost, and get a yes for it.
+			//
+			// The comment above says --overwrite is used "having read the
+			// diff", but nothing printed one, so there was no diff to
+			// read: the file was replaced silently and whatever the
+			// service had added to it went with no record. pokedex-web
+			// lost `COPY ... dist/assets ./assets` to a Dockerfile regen
+			// that way and crashlooped 1805 times over a week, while the
+			// previous ReplicaSet kept serving and nothing paged.
+			//
+			// Identical content is not worth a prompt - it is a no-op, and
+			// the common case when a service has not diverged at all.
+			if cur, err := os.ReadFile(full); err == nil && string(cur) != body {
+				fmt.Printf("\noverwriting %s:\n", path)
+				printRawDiff(string(cur), body)
+				if err := confirmOverwrite(o, path); err != nil {
+					return err
+				}
 			}
 			overwritten = append(overwritten, path)
 			if err := writeFile(full, body); err != nil {

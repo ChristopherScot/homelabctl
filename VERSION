@@ -1,5 +1,6 @@
-v1.18.28
+v1.18.29
 
+v1.18.29 --overwrite shows what it is about to destroy
 v1.18.28 the release gate asks GitHub instead of guessing from git history
 v1.18.27 `check --help` names what it catches
 v1.18.26 go-service scaffold tests survive a service dropping MIN_VERSION; node-service vite config preserves symlinks for file: deps
