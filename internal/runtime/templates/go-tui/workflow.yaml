@@ -27,30 +27,62 @@ jobs:
       - uses: actions/checkout@v4
 {{ .BuildSteps }}
   release:
-    # Only when VERSION changed, and only from main.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Every push to main, and any manual run; the step below
+    # decides whether there is actually a new version to publish.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
-      # grep -qx against the full path. A bare `VERSION` never matches
-      # in a monorepo, where the file is services/<name>/VERSION - so the
-      # gate stayed closed forever and no release could be cut, silently,
-      # because a gate that does not open looks the same as a commit that
-      # did not bump the version.
-      - name: Release only on a VERSION change
+      # Ask GitHub whether this version is already released, instead of
+      # predicting from git history whether it ought to be.
+      #
+      # The old gate was `git diff --name-only HEAD~1 HEAD | grep -qx VERSION`
+      # and it was wrong three separate times: the path never matched in a
+      # monorepo, HEAD~1 does not resolve on a first commit, and a
+      # workflow_dispatch run is not a push. All three failed the same way -
+      # the gate stayed shut, no release was cut, and nothing said so, because
+      # a gate that does not open looks exactly like a commit that did not bump
+      # the version.
+      #
+      # Asking the registry has none of those cases. There is no history to
+      # walk, so there is nothing to get wrong about the shape of it, and a
+      # false negative cannot persist: if the release is missing, the next push
+      # to main cuts it. This is how Clever's wag does it - attempt the
+      # release, treat "already exists" as success.
+      - name: Release unless this version is already published
         id: gate
+        env:
+          GH_TOKEN: ${{ "{{" }} github.token {{ "}}" }}
         run: |
-          if git diff --name-only HEAD~1 HEAD | grep -qx '{{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION'; then
-            echo "go=true" >> $GITHUB_OUTPUT
+          version=$(head -n1 {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION)
+          tag="{{ if .PathFilter }}{{ .Name }}/{{ end }}$version"
+          # Only a definite 404 means "not released yet". An auth
+          # failure, a network blip or any other API error also exits
+          # non-zero, and treating those as not-found would re-release a
+          # version that already exists - and because
+          # softprops/action-gh-release UPDATES an existing release
+          # rather than failing, that silently overwrites published
+          # assets under a tag people have already installed. A
+          # transient error would become a bad release that nothing
+          # reports. So anything that is not a clean yes or a clean 404
+          # fails the job.
+          if out=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" 2>&1); then
+            echo "release already exists for $tag"
+            go=false
+          elif printf '%s' "$out" | grep -q '"message": *"Not Found"'; then
+            echo "no release for $tag yet"
+            go=true
           else
-            echo "go=false" >> $GITHUB_OUTPUT
+            echo "could not determine whether $tag is released:" >&2
+            printf '%s\n' "$out" >&2
+            exit 1
           fi
+          echo "go=$go" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
 
       - uses: actions/setup-go@v5
         if: steps.gate.outputs.go == 'true'
@@ -58,12 +90,6 @@ jobs:
           go-version-file: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.mod
           cache: true
           cache-dependency-path: {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}go.sum
-
-      - name: Read version
-        if: steps.gate.outputs.go == 'true'
-        id: v
-        run: echo "version=$(head -n1 {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}VERSION)" >> $GITHUB_OUTPUT
-
       # Asset names must match what `{{ .Name }} update` looks for:
       # {{ .Name }}_<goos>_<goarch>.tar.gz containing the bare binary.
       # Version is injected here; without it a released binary reports
@@ -72,7 +98,7 @@ jobs:
         if: steps.gate.outputs.go == 'true'{{ if .PathFilter }}
         working-directory: {{ .PathFilter }}{{ end }}
         run: |
-          VERSION="${{ "{{" }} steps.v.outputs.version {{ "}}" }}"
+          VERSION="${{ "{{" }} steps.gate.outputs.version {{ "}}" }}"
           LDFLAGS="-s -w -X main.Version=$VERSION"
           for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
             GOOS="${target%/*}"; GOARCH="${target#*/}"
@@ -91,7 +117,7 @@ jobs:
           # two services reaching the same number attached their assets
           # to ONE release where the second checksums.txt overwrote the
           # first. A dedicated repo has one release line, so no prefix.
-          tag_name: {{ if .PathFilter }}{{ .Name }}/{{ end }}${{ "{{" }} steps.v.outputs.version {{ "}}" }}
+          tag_name: {{ if .PathFilter }}{{ .Name }}/{{ end }}${{ "{{" }} steps.gate.outputs.version {{ "}}" }}
           files: |
             {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}{{ .Name }}_*.tar.gz
             {{ if .PathFilter }}{{ .PathFilter }}/{{ end }}checksums.txt

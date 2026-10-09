@@ -163,7 +163,8 @@ func TestMonorepoCLIWorkflowIsScopedToItsDirectory(t *testing.T) {
 	for _, want := range []string{
 		"services/svc/**",                 // path filter
 		"working-directory: services/svc", // tests and build run there
-		"grep -qx 'services/svc/VERSION'", // the release gate can open
+		"head -n1 services/svc/VERSION",   // the gate reads the right VERSION
+		`tag="svc/$version"`,              // and namespaces the tag to this service
 		"go-version-file: services/svc/go.mod",
 		"services/svc/checksums.txt", // assets are found where built
 	} {
@@ -179,8 +180,11 @@ func TestSingleRepoCLIWorkflowStaysAtTheRoot(t *testing.T) {
 	r, _ := Get("go-cli")
 	a := r.Artifacts(testParams()) // no PathFilter
 
-	if !strings.Contains(a.Workflow, "grep -qx 'VERSION'") {
-		t.Error("single-repo CLI should gate on a bare VERSION")
+	if !strings.Contains(a.Workflow, "head -n1 VERSION") {
+		t.Error("single-repo CLI should read a bare VERSION")
+	}
+	if !strings.Contains(a.Workflow, `tag="$version"`) {
+		t.Error("single-repo CLI tag should not be namespaced")
 	}
 	// Checked against non-comment lines only: the workflow explains the
 	// monorepo case in a comment, and matching that would be testing the
@@ -2056,5 +2060,112 @@ func TestMakeBuildProducesABinary(t *testing.T) {
 				t.Error("build does not write a binary anywhere")
 			}
 		})
+	}
+}
+
+// A scaffolded repo must be able to release from its first commit, and
+// the gate must not depend on git history to decide that.
+//
+// It used to: `git diff --name-only HEAD~1 HEAD | grep -qx VERSION`, which
+// on a parentless commit cannot resolve HEAD~1, fails, matches nothing and
+// reports "VERSION did not change" - about the one commit that introduces
+// VERSION. Reported from ChristopherScot/nvdiff, whose first push carried
+// VERSION=v0.1.0 and a green CI run that published nothing.
+//
+// The fix was not a fourth special case. The gate now asks GitHub whether
+// the tag exists, so there is no history to walk and nothing to get wrong
+// about its shape.
+func TestReleaseGateDoesNotDependOnGitHistory(t *testing.T) {
+	for _, name := range []string{"go-cli", "go-tui", "go-mobile"} {
+		r, err := Get(name)
+		if err != nil {
+			t.Fatalf("runtime %q: %v", name, err)
+		}
+		a := r.Artifacts(testParams())
+		if a.Workflow == "" {
+			continue
+		}
+		var live []string
+		for _, l := range strings.Split(a.Workflow, "\n") {
+			if t := strings.TrimSpace(l); t != "" && !strings.HasPrefix(t, "#") {
+				live = append(live, l)
+			}
+		}
+		yaml := strings.Join(live, "\n")
+		for _, banned := range []string{"HEAD~1", "git diff", "fetch-depth"} {
+			if strings.Contains(yaml, banned) {
+				t.Errorf("%s: release gate still reads git history (%q); a first commit has none", name, banned)
+			}
+		}
+		if !strings.Contains(yaml, "gh api") || !strings.Contains(yaml, "releases/tags/") {
+			t.Errorf("%s: gate should ask GitHub whether the release exists", name)
+		}
+	}
+}
+
+// workflow_dispatch is declared as a trigger, so it has to actually be
+// able to cut a release. The job-level condition pinned the release to
+// github.event_name == 'push', which left the manual trigger able to run
+// the workflow but never to publish anything.
+func TestReleaseJobAcceptsManualDispatch(t *testing.T) {
+	for _, name := range []string{"go-cli", "go-tui", "go-mobile"} {
+		r, err := Get(name)
+		if err != nil {
+			t.Fatalf("runtime %q: %v", name, err)
+		}
+		a := r.Artifacts(testParams())
+		if a.Workflow == "" || !strings.Contains(a.Workflow, "workflow_dispatch") {
+			continue
+		}
+		if strings.Contains(a.Workflow, "if: github.event_name == 'push' && github.ref") {
+			t.Errorf("%s: release job excludes workflow_dispatch, so the declared manual trigger can never release", name)
+		}
+	}
+}
+
+// The gate must open only on a definite "not released yet", never on any
+// other failure.
+//
+// `gh release view` exits non-zero for a missing release AND for an auth
+// failure, a network blip, or any API error - all indistinguishable by
+// exit code alone. Treating them alike re-releases a version that already
+// exists, and because softprops/action-gh-release UPDATES an existing
+// release rather than failing, that silently overwrites assets under a
+// tag people have already installed. A transient 401 would become a bad
+// release that nothing reports.
+//
+// Reported by the infra-95 session against 7bbfd05. Verified against the
+// real gh: a missing release returns {"message": "Not Found"}, bad
+// credentials returns {"message": "Bad credentials"}, and both exit 1.
+func TestReleaseGateFailsClosedOnAnErrorItCannotClassify(t *testing.T) {
+	for _, name := range []string{"go-cli", "go-tui", "go-mobile"} {
+		r, err := Get(name)
+		if err != nil {
+			t.Fatalf("runtime %q: %v", name, err)
+		}
+		a := r.Artifacts(testParams())
+		if a.Workflow == "" {
+			continue
+		}
+		var live []string
+		for _, l := range strings.Split(a.Workflow, "\n") {
+			if t := strings.TrimSpace(l); t != "" && !strings.HasPrefix(t, "#") {
+				live = append(live, l)
+			}
+		}
+		yaml := strings.Join(live, "\n")
+
+		// Opening the gate requires matching the 404 body explicitly...
+		if !strings.Contains(yaml, `"message": *"Not Found"`) {
+			t.Errorf("%s: gate does not require a definite Not Found to release", name)
+		}
+		// ...and anything unclassified has to stop the job.
+		if !strings.Contains(yaml, "exit 1") {
+			t.Errorf("%s: gate does not fail the job on an unclassifiable error", name)
+		}
+		// The bare form is what makes an auth error look like not-found.
+		if strings.Contains(yaml, `gh release view "$tag" >/dev/null 2>&1`) {
+			t.Errorf("%s: gate still treats any non-zero exit as not-released", name)
+		}
 	}
 }
