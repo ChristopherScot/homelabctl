@@ -258,6 +258,16 @@ func (e embedded) clientFiles(p Params) []File {
 		// under the owner's scope, so that is how a consumer imports it.
 		ImportPath: "@" + p.NPMScope() + "/" + p.Name + "-client",
 		Published:  true,
+		// False because the scaffolded openapi.yml ships no
+		// securitySchemes, which is what decides whether ogen's
+		// NewClient takes a SecuritySource. If that template ever
+		// gains one, this has to be computed from the spec the way
+		// the third-party path does - otherwise the generated New
+		// wraps a signature that no longer exists and the service
+		// stops compiling, with nothing pointing here.
+		// TestScaffoldedSpecHasNoSecuritySchemes guards the
+		// assumption.
+		HasSecurity: false,
 	}
 
 	var out []File
