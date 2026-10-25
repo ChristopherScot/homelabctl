@@ -212,31 +212,50 @@ export class Breaker {
     }
     return false
   }
-
+  /** Takes the probe slot back if this request held it, updates the
+   *  failure run, and re-arms the cooldown when the circuit is open
+   *  and this request did not prove recovery. */
   record(o: Outcome): void {
-    // Taken back before the ignore branch returns: a probe that is
-    // never returned wedges the breaker closed for good.
     const probe = this.#probing
     this.#probing = false
 
-    if (o === 'ignore') {
-      // An inconclusive probe still spends the slot. We learned
-      // nothing, so the dependency is still presumed down - and
-      // without re-arming, the cooldown has already elapsed, so the
-      // next caller gets another probe, and the next.
-      if (probe) this.#openedAt = Date.now()
+    // Each outcome declares what it PROVED, and the clock below
+    // reads those rather than the outcome's name. An outcome added
+    // later has to say so to count as recovery or as a failure, and
+    // silence gets the conservative answer on both.
+    let recovered = false
+    let extended = false
+    switch (o) {
+      case 'healthy':
+        this.#failures = 0
+        recovered = true
+        break
+      case 'unwell':
+        this.#failures++
+        extended = true
+        break
+      case 'ignore':
+        // Tells us nothing, so the run stands.
+        break
+    }
+
+    // A probe that did not prove recovery spends its slot and costs
+    // a full cooldown, or an open circuit hands a fresh probe to
+    // every caller the moment the first reports back.
+    if (probe && !recovered) {
+      this.#openedAt = Date.now()
       return
     }
-    if (o === 'healthy') {
-      this.#failures = 0
-      return
+
+    // A failure moves the clock so the cooldown is measured from the
+    // last one rather than the first.
+    //
+    // >= not ===: requests already in flight when the breaker
+    // tripped land afterwards, and with === their failures would not
+    // move it, so the cooldown would expire early.
+    if (extended && this.#failures >= this.failedRequests) {
+      this.#openedAt = Date.now()
     }
-    this.#failures++
-    // >= not ===: requests already in flight when the breaker tripped
-    // land afterwards, and with === their failures would not move the
-    // clock, so the cooldown would expire early. A failed probe
-    // re-arms it - the dependency is still down.
-    if (this.#failures >= this.failedRequests || probe) this.#openedAt = Date.now()
   }
 }
 
