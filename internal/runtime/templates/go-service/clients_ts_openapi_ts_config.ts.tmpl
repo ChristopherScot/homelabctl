@@ -1,0 +1,18 @@
+// How the TypeScript client is generated. Kept beside the output, the
+// way ogen.yml sits beside api/, so the settings are visible where the
+// generated code is.
+//
+// A plain object rather than hey-api's defineConfig(): the generator
+// runs through npx, whose temporary install is not on this file's
+// module path, so importing from it fails with MODULE_NOT_FOUND
+// naming this config rather than the real cause.
+// output.path is a directory hey-api CLEARS on every run, so it gets
+// one of its own: the hand-written index.ts, resilience.js and
+// package.json beside it would otherwise be deleted.
+// importFileExtension 'ts': the package ships TypeScript sources, not
+// a build output, so the generated files must import the .ts that is
+// actually there. 'js' points at files nobody emits.
+export default {
+  input: '../../openapi.yml',
+  output: { path: './generated', importFileExtension: 'ts', postProcess: [] },
+}
