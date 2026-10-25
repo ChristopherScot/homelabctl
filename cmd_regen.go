@@ -88,15 +88,6 @@ func runRegen(cfgPath string, checkOnly bool) error {
 		return fmt.Errorf("%d file(s) out of date - run `homelabctl regen`", len(stale))
 	}
 
-	// Generate and Lock, never Upgrade. Both are deterministic - the
-	// same spec and the same manifest give the same output - which is
-	// what lets CI run this and fail on a diff. Upgrade belongs to
-	// creating a service; running it here would be a red build on any
-	// day a dependency published.
-	if err := run(dir, r.Generate(artifactParams(c, "", "")), r.Lock()); err != nil {
-		return err
-	}
-
 	// Rewrite the files the TEMPLATES own, not just the ones ogen writes.
 	//
 	// regen used to run the generate commands and stop, so a fix to a
@@ -150,6 +141,24 @@ func runRegen(cfgPath string, checkOnly bool) error {
 		}
 		fmt.Println("  updated:", path)
 	}
+
+	// Generate AFTER the templates, not before.
+	//
+	// A generator reads config the templates own - openapi-ts.config.ts
+	// says where the TypeScript client is written - and a service
+	// created before that file existed does not have it yet. Generating
+	// first failed on exactly the file this step was about to write,
+	// with an error from inside the generator that named neither.
+	//
+	// Generate and Lock, never Upgrade. Both are deterministic - the
+	// same spec and the same manifest give the same output - which is
+	// what lets CI run this and fail on a diff. Upgrade belongs to
+	// creating a service; running it here would be a red build on any
+	// day a dependency published.
+	if err := run(dir, r.Generate(params), r.Lock()); err != nil {
+		return err
+	}
+
 	for _, s := range stale {
 		fmt.Println("  updated:", s)
 	}
