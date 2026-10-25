@@ -15,6 +15,14 @@ COPY . .
 
 WORKDIR /repo/{{ .ServiceDir }}
 
+# A generated client in a sibling directory ships TypeScript sources
+# and compiles to dist/, so it is built before this service installs
+# it: npm resolves `file:` main into dist/ and finds nothing otherwise.
+RUN for c in ../*/clients/ts; do \
+      [ -f "$c/package.json" ] || continue; \
+      ( cd "$c" && npm ci --no-audit --no-fund && npm run build ); \
+    done
+
 # Dev deps included: the bundler and TypeScript are devDependencies and
 # neither ends up in the image.
 RUN npm ci

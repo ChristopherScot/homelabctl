@@ -1,5 +1,6 @@
-v1.20.1
+v1.20.2
 
+v1.20.2 a consumer builds the generated client it depends on
 v1.20.1 a sibling service installing the client gets it built
 v1.20.0 TypeScript clients get named operations, like the Go ones
 v1.19.0 `client generate`: typed clients from a spec you do not own
