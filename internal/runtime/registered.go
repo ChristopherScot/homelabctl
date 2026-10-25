@@ -21,8 +21,16 @@ func init() {
 			// resolves the spec relative to itself.
 			codegen.HeyAPICommandIn("clients/ts"),
 		},
-		// Without go.sum the service does not build at all.
-		lock: [][]string{{"go", "mod", "tidy"}},
+		// Without go.sum the service does not build at all. The client
+		// gets a lockfile too: it is published, and its build pins the
+		// generator and typescript, so an unpinned publish could emit
+		// different JS from the same spec. --package-lock-only because
+		// nothing here needs node_modules on disk; the publish workflow
+		// installs when it builds.
+		lock: [][]string{
+			{"go", "mod", "tidy"},
+			{"sh", "-c", "cd 'clients/ts' && npm install --package-lock-only --no-audit --no-fund"},
+		},
 		// A new service starts on current transitive versions; tidy alone
 		// resolves to the minimums each dependency declares, which are
 		// older than what is released.

@@ -65,11 +65,15 @@ jobs:
             fi
 
             echo "publishing $name@$version"
-            # npm ci first: the package compiles to dist/ in its
-            # prepublishOnly hook, and tsc is a devDependency. Without
-            # the install the hook fails with "tsc: not found" - after
-            # the version check, so the failure looks like a publish
-            # problem rather than a missing toolchain.
+            # Install first: the package compiles to dist/ in its
+            # prepack hook, and tsc is a devDependency. Without the
+            # install the hook fails with "tsc: not found" - after the
+            # version check, so the failure looks like a publish problem
+            # rather than a missing toolchain.
+            #
+            # prepack, not prepublishOnly: `npm pack` does not run
+            # prepublishOnly, so a tarball built that way held
+            # package.json and nothing else.
             #
             # --provenance records where the package was built, which
             # OIDC already proves, so it costs nothing.
