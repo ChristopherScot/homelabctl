@@ -761,21 +761,30 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 		t.Error("a package.json at the service root is the old git-install layout")
 	}
 
-	js, ok := files["clients/ts/resilience.js"]
+	js, ok := files["clients/ts/resilience.ts"]
 	if !ok {
-		t.Fatal("no clients/ts/resilience.js")
+		t.Fatal("no clients/ts/resilience.ts")
 	}
 	// The version is read from package.json, never copied here - the
 	// header cannot then disagree with the version a consumer installed.
 	if !strings.Contains(js, "pkg.version") {
 		t.Error("the TypeScript client hardcodes its version instead of reading package.json")
 	}
-	// Relative to resilience.js, which is the same directory. It used to be
+	// Relative to resilience.ts, which is the same directory. It used to be
 	// '../../package.json' because the manifest was at the service root;
 	// with the manifest moved, that path points outside the published
 	// tarball and the client fails to load for every consumer.
 	if !strings.Contains(js, "from './package.json'") {
 		t.Error("the client's package.json import does not point beside it")
+	}
+
+	// fetch rejects for a transport failure and resolves for an HTTP
+	// error status; the generated client returns { error } for both.
+	// Without the interceptor that puts the split back, an unreachable
+	// server reads to a caller exactly like a 404 - and a service whose
+	// "API unavailable" handler catches a throw stops working.
+	if !strings.Contains(js, "interceptors.error.use") {
+		t.Error("a transport failure is not re-thrown; it reaches callers looking like an answer")
 	}
 
 	for _, want := range []string{
@@ -787,8 +796,21 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 		}
 	}
 
-	if _, ok := files["clients/ts/resilience.d.ts"]; !ok {
-		t.Error("no clients/ts/resilience.d.ts; consumers get no types for the client itself")
+	// The package is PUBLISHED, so it ships compiled JS and generated
+	// declarations from dist/ - Node refuses to strip types under
+	// node_modules, so a consumer of a TypeScript-source package fails
+	// at run time rather than at install.
+	pkg, hasPkg := files["clients/ts/package.json"]
+	if !hasPkg {
+		t.Fatal("no clients/ts/package.json")
+	}
+	for _, want := range []string{`"main": "dist/index.js"`, `"types": "dist/index.d.ts"`, `"prepack"`} {
+		if !strings.Contains(pkg, want) {
+			t.Errorf("the published package does not declare %s; it would ship unbuilt TypeScript", want)
+		}
+	}
+	if _, ok := files["clients/ts/tsconfig.json"]; !ok {
+		t.Error("no clients/ts/tsconfig.json; the package cannot be built")
 	}
 
 	// The package entry re-exports the generated operations beside the
@@ -798,7 +820,7 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 	if !ok {
 		t.Fatal("no clients/ts/index.ts")
 	}
-	for _, want := range []string{"./generated/sdk.gen.ts", "./resilience.js"} {
+	for _, want := range []string{"./generated/sdk.gen.ts", "./resilience.ts"} {
 		if !strings.Contains(index, want) {
 			t.Errorf("the package entry does not re-export %s", want)
 		}
@@ -1339,7 +1361,7 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	// Generated: a fix to one of these templates has to reach services
 	// that already exist, or regen is only useful on the day a service
 	// is created.
-	for _, generated := range []string{"api/client.go", "clients/ts/resilience.js", "clients/ts/package.json"} {
+	for _, generated := range []string{"api/client.go", "clients/ts/resilience.ts", "clients/ts/package.json"} {
 		if !set[generated] {
 			t.Errorf("regen does not rewrite %s; a template fix would never reach existing services", generated)
 		}
@@ -1767,7 +1789,7 @@ func TestStartupGuardMatchesBothEntrypoints(t *testing.T) {
 // npm rejects an uppercase scope, and GitHub owners are commonly mixed
 // case - ChristopherScot among them. NPMScope() exists for this and
 // clients/ts/package.json used it, so the PUBLISHED name was always
-// right; the install hint in clients/ts/resilience.js used .Owner instead
+// right; the install hint in clients/ts/resilience.ts used .Owner instead
 // and told anyone reading it to install @ChristopherScot/<name>-client,
 // which npm refuses.
 //
@@ -1844,7 +1866,7 @@ func TestClientHeadersAgreeAcrossTemplates(t *testing.T) {
 
 	// The two the server reads must be set by both clients.
 	for _, h := range []string{"Client-Name", "Client-Version"} {
-		for _, path := range []string{"api/client.go", "clients/ts/resilience.js"} {
+		for _, path := range []string{"api/client.go", "clients/ts/resilience.ts"} {
 			body, ok := bodies[path]
 			if !ok {
 				t.Fatalf("no %s in the artifacts", path)

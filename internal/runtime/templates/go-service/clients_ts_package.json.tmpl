@@ -3,11 +3,18 @@
   "version": "{{ .SpecVersion }}",
   "description": "Typed client for the {{ .Name }} API, generated from its OpenAPI spec.",
   "type": "module",
-  "main": "index.ts",
-  "types": "index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./index.ts",
-    "./client": "./generated/client.gen.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
   },
   "repository": {
     "type": "git",

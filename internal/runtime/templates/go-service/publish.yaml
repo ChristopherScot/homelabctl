@@ -65,9 +65,15 @@ jobs:
             fi
 
             echo "publishing $name@$version"
+            # npm ci first: the package compiles to dist/ in its
+            # prepublishOnly hook, and tsc is a devDependency. Without
+            # the install the hook fails with "tsc: not found" - after
+            # the version check, so the failure looks like a publish
+            # problem rather than a missing toolchain.
+            #
             # --provenance records where the package was built, which
             # OIDC already proves, so it costs nothing.
-            ( cd "$dir" && npm publish --provenance )
+            ( cd "$dir" && npm install --no-audit --no-fund && npm publish --provenance )
             published=$((published + 1))
           done < <(find . -path '*/clients/ts/package.json' -not -path './node_modules/*' | sort)
 
