@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -143,6 +144,135 @@ func TestModulePath(t *testing.T) {
 // is what makes them editable - and also means a template fix cannot
 // reach a service that already exists. --force is how one is pulled in,
 // and it must touch only what it names.
+// --overwrite names the files to rewrite, and a file that does not
+// exist in the service is not one of them.
+//
+// put only consulted o.overwrite for files that already existed, so
+// everything else was written unconditionally: `--overwrite
+// Dockerfile` in a monorepo service also created a .github/ there,
+// where that service's CI does not live.
+func TestOverwriteWritesNoFileItDidNotName(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "Dockerfile")
+	if err := os.WriteFile(target, []byte("# mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	o := initOpts{
+		name: "svc", runtimeID: "go-service", owner: "o", yes: true,
+		localOnly: true, skipTidy: true,
+		overwrite: map[string]bool{"Dockerfile": true},
+	}
+	if err := runInit(o); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		switch e.Name() {
+		case "Dockerfile":
+		case config.SchemaFileName:
+			// Deliberately unconditional: a cache of a constant in this
+			// binary, which a stale copy silently contradicts. See
+			// config.WriteSchema.
+		default:
+			t.Errorf("--overwrite Dockerfile also wrote %s", e.Name())
+		}
+	}
+}
+
+// --overwrite edits a service that already exists, so it must never
+// reach the remote setup that creates a GitHub repository.
+//
+// Without this it did: run in a service directory WITHOUT
+// --local-only, it created an empty repo named after the service,
+// cloned it into the tree it was supposed to be editing, and died on
+// a manifest inside that clone.
+//
+// Asserts the call is never made, rather than letting it run and
+// relying on GitHub to refuse: that passes only because the
+// authenticated user cannot create a repo under the fixture's owner,
+// and on a machine that can, the test creates one.
+func TestOverwriteNeverCreatesARemote(t *testing.T) {
+	called := false
+	orig := setupRemoteFn
+	setupRemoteFn = func(initOpts) (string, error) {
+		called = true
+		return "", errors.New("setupRemote must not be reached by --overwrite")
+	}
+	t.Cleanup(func() { setupRemoteFn = orig })
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "Dockerfile")
+	if err := os.WriteFile(target, []byte("# mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	// No --local-only: that flag already skips the remote, so a test
+	// that sets it cannot catch this.
+	o := initOpts{
+		name: "svc", runtimeID: "go-service", owner: "o", yes: true,
+		skipTidy:  true,
+		overwrite: map[string]bool{"Dockerfile": true},
+	}
+	if err := runInit(o); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Error("--overwrite reached setupRemote, which creates a GitHub repository")
+	}
+
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) == "# mine\n" {
+		t.Error("--overwrite Dockerfile did not rewrite it")
+	}
+}
+
+// serviceSubdirOf answers where a service sits within its repository,
+// which is what --overwrite uses in place of --parent-repo. Getting it
+// wrong rendered WORKDIR /repo/. and failed the Docker build on a
+// package.json that was never missing.
+func TestServiceSubdirOf(t *testing.T) {
+	repo := t.TempDir()
+	svc := filepath.Join(repo, "services", "web")
+	if err := os.MkdirAll(svc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	withConfig := filepath.Join(svc, configName)
+	if err := os.WriteFile(withConfig, []byte("name: web\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bare := filepath.Join(repo, "services", "nocfg")
+	if err := os.MkdirAll(bare, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A single-service repo: the service IS the root.
+	if err := os.WriteFile(filepath.Join(repo, configName), []byte("name: solo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct{ name, root, wd, want string }{
+		{"monorepo service", repo, svc, "services/web"},
+		{"repo root is the service", repo, repo, ""},
+		{"directory holds no service", repo, bare, ""},
+		{"not in a repository", "", svc, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := serviceSubdirOf(tc.root, tc.wd); got != tc.want {
+				t.Errorf("serviceSubdirOf = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestOverwriteRewritesOnlyTheNamedFiles(t *testing.T) {
 	dir := t.TempDir()
 	mine := filepath.Join(dir, "main.go")

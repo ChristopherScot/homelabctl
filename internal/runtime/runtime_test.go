@@ -2233,7 +2233,7 @@ func TestNodeServiceBuildsASiblingClient(t *testing.T) {
 	// The RUN line, not any mention of the path: a comment names
 	// `file:../<api>/clients/ts` too, and asserting on the bare path
 	// passes with the build step deleted.
-	build := "for c in ../*/clients/ts"
+	build := "for c in ./clients/ts ../*/clients/ts"
 	if !strings.Contains(dockerfile, build) {
 		t.Error("the Dockerfile does not build a sibling generated client before npm ci")
 	}
