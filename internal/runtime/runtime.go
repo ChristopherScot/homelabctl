@@ -103,7 +103,7 @@ func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 // resolves correctly because a scaffolded client sits at its own
 // package root, which is where npx puts the working directory.
 func (p Params) HeyAPIConfig() string {
-	return codegen.HeyAPIConfig("../../openapi.yml", "./generated")
+	return codegen.HeyAPIConfigAtRoot("../../openapi.yml")
 }
 
 // BinaryName is what `go build` with no -o produces: the last element of

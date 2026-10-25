@@ -279,21 +279,11 @@ func generateTSClient(dir, name, apiVersion string, c clientSpec, specPath strin
 		return fmt.Errorf("creating %s: %w", c.Out, err)
 	}
 
-	cfgPath := filepath.Join(out, "openapi-ts.config.ts")
-	// The spec is a temporary file outside the output tree, so the
-	// config names it absolutely rather than relative to itself.
-	abs, err := filepath.Abs(specPath)
+	cfgPath, cfg, err := codegen.HeyAPIConfigNestedIn(out, specPath)
 	if err != nil {
 		return err
 	}
-	// Absolute, for the same reason the config path is: npx moves the
-	// working directory to the nearest package.json, so './generated'
-	// would land there instead of in this client.
-	absOut, err := filepath.Abs(filepath.Join(out, "generated"))
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(cfgPath, []byte(codegen.HeyAPIConfig(abs, absOut)), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		return err
 	}
 	defer os.Remove(cfgPath)
