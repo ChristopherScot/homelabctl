@@ -15,18 +15,9 @@ COPY . .
 
 WORKDIR /repo/{{ .ServiceDir }}
 
-# Build any generated client this service depends on BEFORE installing,
-# which is the shape every monorepo Docker guide lands on: install
-# manifests, build the shared package, then build the service.
-#
-# Not an install hook. A `file:` dependency ships TypeScript sources
-# and compiles to dist/, and each hook is skipped somewhere:
-# prepublishOnly by `npm pack`, prepack for a `file:` dep. prepare
-# covers both, but npm only DOCUMENTS installing a dependency's own
-# devDependencies before prepare for GIT dependencies - for a local
-# folder it is unspecified, and it changed between patch releases:
-# 11.19.0 built the client, 11.19.1 failed with "tsc: not found".
-# Building it here depends on none of that.
+# A generated client in a sibling directory ships TypeScript sources
+# and compiles to dist/, so it is built before this service installs
+# it: npm resolves `file:` main into dist/ and finds nothing otherwise.
 RUN for c in ../*/clients/ts; do \
       [ -f "$c/package.json" ] || continue; \
       ( cd "$c" && npm ci --no-audit --no-fund && npm run build ); \
