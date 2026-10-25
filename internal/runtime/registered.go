@@ -12,11 +12,10 @@ func init() {
 		// a diff.
 		generate: [][]string{
 			{"go", "generate", "./..."},
-			// The TypeScript client's types come from the same spec.
-			// Pinned to openapi-typescript 7 because it requires
-			// TypeScript ^5 and breaks on 7; running it through npx
-			// keeps that constraint out of the service's own
-			// dependencies, which stay current.
+			// The TypeScript client comes from the same spec. Run
+			// through npx so the pinned generator and its typescript
+			// peer stay out of the service's own dependencies, which
+			// stay current.
 			// Run from clients/ts: openapi-ts.config.ts lives there and
 			// resolves the spec relative to itself.
 			codegen.HeyAPICommandIn("clients/ts"),

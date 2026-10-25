@@ -158,8 +158,7 @@ the directory rather than at npm:
 
 ```json
 "dependencies": {
-  "@you/thatservice-client": "file:../thatservice/clients/ts",
-  "openapi-fetch": "^0.17.0"
+  "@you/thatservice-client": "file:../thatservice/clients/ts"
 }
 ```
 
@@ -172,13 +171,13 @@ Depending on the published package instead works, but you cannot test a
 spec change until it is released, and the pinned range drifts behind the
 spec without anything failing.
 
-Two things `file:` needs, both of which fail confusingly if missed:
-
-**Declare `openapi-fetch` here too.** npm does not install a symlinked
-package's own dependencies, so the client's import of it resolves against
-this service's `node_modules`. Without it the build fails with "Cannot
-find package 'openapi-fetch'" naming a file in the OTHER service's
+The client has no runtime dependencies of its own - the generator
+vendors its fetch layer into the package - so there is nothing else to
+declare. npm does not install a symlinked package's dependencies, which
+would otherwise fail here naming a file in the OTHER service's
 directory.
+
+One thing `file:` does need, which fails confusingly if missed:
 
 **Preserve symlinks in every resolver.** `resolve.preserveSymlinks: true`
 in each vite config - the SSR one and the browser one - AND
@@ -205,10 +204,9 @@ typecheck job is the only thing that catches a renamed field. And
 `vite build --watch` does not see edits made through the symlink, so
 restart the dev server after a regen.
 
-That `openapi-fetch` line generalises: every dependency the client
-declares has to be declared here too, for the same reason. The generated
-client has had one for its whole life, and if a second appears the build
-fails naming it -
+The generated client declares no runtime dependencies today, but if one
+ever appears it has to be declared here too, for the reason above. The
+build fails naming it -
 
 ```
 [vite]: Rollup failed to resolve import "x" from ".../clients/ts/index.js"
