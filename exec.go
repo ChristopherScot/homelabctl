@@ -63,6 +63,28 @@ func runQuiet(what, stdin string, argv ...string) error {
 	return nil
 }
 
+// runIn runs one command in dir, for its effect.
+//
+// runQuiet with a working directory. `run` in cmd_init.go takes groups
+// of commands because the scaffolder has phases; a single generator
+// invocation wrapped as [][]string{argv} reads as ceremony, and run's
+// failure message leads with the whole argv - for `go run
+// github.com/ogen-go/...@v1.24.0 --config ... --target ...` that buries
+// the generator's own error under a line of flags.
+func runIn(what, dir string, argv ...string) error {
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("%s: %w\n%s", what, err, msg)
+		}
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	return nil
+}
+
 // withStderr folds a command's own message into its error.
 //
 // On its own line: gh prints usage and kubectl prints a hint, so these

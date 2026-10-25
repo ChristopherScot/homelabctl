@@ -28,20 +28,43 @@ const configName = "config.yaml"
 // the root would find someone else's config.yaml in a home directory
 // and act on the wrong service.
 func findConfig() (string, error) {
+	path, start, err := findUpwards(configName)
+	if err != nil {
+		return "", err
+	}
+	if path == "" {
+		return "", fmt.Errorf("no %s in %s or any parent up to the repository root.\n"+
+			"cd into a service directory - the one holding its %s - and run this there",
+			configName, start, configName)
+	}
+	return path, nil
+}
+
+// findUpwards walks up from the working directory looking for name,
+// stopping at the repository boundary. It returns the path found (empty
+// when there is none) and the directory the search started from, so a
+// caller can name it in its own not-found message.
+//
+// Shared rather than reimplemented per command, because the stopping
+// rule is the part that matters and the part that gets forgotten:
+// walking all the way to / finds someone else's file in a home
+// directory and acts on it. A second copy of this loop written without
+// the .git check did exactly that.
+func findUpwards(name string) (found, start string, err error) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("working directory: %w", err)
+		return "", "", fmt.Errorf("working directory: %w", err)
 	}
-	start := dir
+	start = dir
 
 	for {
-		candidate := filepath.Join(dir, configName)
+		candidate := filepath.Join(dir, name)
 		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
+			return candidate, start, nil
 		}
 
 		// A repository boundary is as far up as a service can be. Going
-		// past it would pick up an unrelated config.yaml.
+		// past it would pick up an unrelated file.
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 			break
 		}
@@ -52,10 +75,7 @@ func findConfig() (string, error) {
 		}
 		dir = parent
 	}
-
-	return "", fmt.Errorf("no %s in %s or any parent up to the repository root.\n"+
-		"cd into a service directory - the one holding its %s - and run this there",
-		configName, start, configName)
+	return "", start, nil
 }
 
 // repoRoot is the directory holding .git, walking up from the working

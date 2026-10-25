@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/ChristopherScot/homelabctl/internal/codegen"
 )
 
 // InitialSpecVersion is where a new service's API starts. It reaches both
@@ -75,6 +77,13 @@ type Params struct {
 	// BuildSteps is filled in by the runtime before rendering its workflow.
 	BuildSteps string
 }
+
+// OgenCommand is the pinned ogen invocation the //go:generate
+// directive runs. It comes from internal/codegen so the version a
+// scaffolded service generates with cannot drift from the version
+// `homelabctl client` generates with - they were two literals before,
+// with nothing comparing them.
+func (p Params) OgenCommand() string { return codegen.OgenCommand() }
 
 // BinaryName is what `go build` with no -o produces: the last element of
 // the module path, which is not always the service name. The repo
