@@ -257,8 +257,16 @@ func generateGoClient(dir, name, apiVersion string, c clientSpec, specPath strin
 	if err := runIn("generating the Go client for "+name, dir, argv...); err != nil {
 		return err
 	}
+	// ogen's NewClient takes a SecuritySource before its options when
+	// the spec declares securitySchemes, so our constructor has to
+	// know which signature it is wrapping.
+	hasSecurity, err := specHasSecurity(specPath)
+	if err != nil {
+		return err
+	}
 	if err := writeSupportFiles(out, apiclient.Go, apiclient.Params{
 		Name: name, Version: apiVersion, Package: pkg,
+		HasSecurity: hasSecurity,
 	}); err != nil {
 		return err
 	}
@@ -424,4 +432,23 @@ func writeSupportFiles(out string, set func(apiclient.Params) ([]apiclient.File,
 		}
 	}
 	return nil
+}
+
+// specHasSecurity reports whether the document declares any
+// securityScheme. ogen keys its constructor signature off that, and
+// reading the spec is cheaper than parsing back the code it wrote.
+func specHasSecurity(specPath string) (bool, error) {
+	raw, err := os.ReadFile(specPath)
+	if err != nil {
+		return false, err
+	}
+	var doc struct {
+		Components struct {
+			SecuritySchemes map[string]json.RawMessage `json:"securitySchemes" yaml:"securitySchemes"`
+		} `json:"components" yaml:"components"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return false, fmt.Errorf("reading securitySchemes from %s: %w", specPath, err)
+	}
+	return len(doc.Components.SecuritySchemes) > 0, nil
 }

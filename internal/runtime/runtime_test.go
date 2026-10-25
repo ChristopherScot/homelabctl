@@ -2242,3 +2242,19 @@ func TestNodeServiceBuildsASiblingClient(t *testing.T) {
 		t.Error("the client is built after npm ci, which is too late")
 	}
 }
+
+// clientFiles hardcodes HasSecurity: false, which is only correct
+// while the scaffolded spec declares no securitySchemes. ogen keys
+// its constructor signature off exactly that, so the day this
+// template gains one, the generated client stops compiling - and the
+// cause is a bool in another package. Fail here instead.
+func TestScaffoldedSpecHasNoSecuritySchemes(t *testing.T) {
+	spec, err := templates.ReadFile("templates/go-service/openapi.yml.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(spec), "securitySchemes") {
+		t.Error("the scaffolded spec now declares securitySchemes; " +
+			"clientFiles must compute HasSecurity from the spec rather than hardcoding false")
+	}
+}
