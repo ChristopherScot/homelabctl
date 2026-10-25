@@ -90,6 +90,14 @@ func (p Params) OgenCommand() string { return codegen.OgenCommand() }
 // drift from the version the generate step actually runs.
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 
+// HeyAPIConfig is the generated client's openapi-ts.config.ts.
+//
+// From internal/codegen, so a scaffolded service and a third-party
+// client cannot end up with different output layouts - the hand-written
+// files live above the directory hey-api clears, and that is only true
+// if both configs say so.
+func (p Params) HeyAPIConfig() string { return codegen.HeyAPIConfig("../../openapi.yml") }
+
 // BinaryName is what `go build` with no -o produces: the last element of
 // the module path, which is not always the service name. The repo
 // go-shlink-redirector holds the service shlink-redirector, so a
