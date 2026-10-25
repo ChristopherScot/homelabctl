@@ -181,7 +181,7 @@ func runInit(o initOpts) error {
 	// editing.
 	dir := "."
 	if !o.localOnly && len(o.overwrite) == 0 {
-		d, err := setupRemote(o)
+		d, err := setupRemoteFn(o)
 		if err != nil {
 			return fmt.Errorf("remote setup: %w", err)
 		}
@@ -475,6 +475,13 @@ func confirmOverwrite(o initOpts, path string) error {
 // setupRemote creates the repo if it does not exist and clones it,
 // returning the local directory. Both halves are skipped when already
 // present, so re-running is safe.
+// setupRemoteFn is the remote step, indirected so a test can assert
+// that a code path never reaches it. Shelling out to `gh repo create`
+// to find out would depend on the authenticated user lacking rights to
+// the owner in the fixture - which passes for the wrong reason, and on
+// a differently provisioned machine creates a real repository.
+var setupRemoteFn = setupRemote
+
 func setupRemote(o initOpts) (string, error) {
 	repo := o.name
 	if o.parentRepo != "" {
@@ -1267,12 +1274,17 @@ func existingRuntime() (string, error) {
 // Empty for a single-service repo, where the service IS the root and
 // there is no subdirectory to name.
 func serviceSubdir() string {
-	root := repoRoot()
-	if root == "" {
-		return ""
-	}
 	wd, err := os.Getwd()
 	if err != nil {
+		return ""
+	}
+	return serviceSubdirOf(repoRoot(), wd)
+}
+
+// serviceSubdirOf is serviceSubdir with its inputs passed in, so the
+// cases can be tested without moving the process between directories.
+func serviceSubdirOf(root, wd string) string {
+	if root == "" {
 		return ""
 	}
 	rel, err := filepath.Rel(root, wd)

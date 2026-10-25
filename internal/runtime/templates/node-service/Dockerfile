@@ -13,12 +13,16 @@ WORKDIR /repo
 # in a sibling directory (`file:../<api>/clients/ts`).
 COPY . .
 
-WORKDIR /repo/{{ .ServiceDir }}
+WORKDIR /repo{{ if ne .ServiceDir "." }}/{{ .ServiceDir }}{{ end }}
 
-# A generated client in a sibling directory ships TypeScript sources
-# and compiles to dist/, so it is built before this service installs
-# it: npm resolves `file:` main into dist/ and finds nothing otherwise.
-RUN for c in ../*/clients/ts; do \
+# A generated client ships TypeScript sources and compiles to dist/, so
+# it is built before this service installs it: npm resolves the `file:`
+# main into dist/ and finds nothing otherwise.
+#
+# Both layouts: clients/ts beside the service in a single-service repo,
+# and a sibling service's in a monorepo. Neither glob matching is a
+# service that consumes no client.
+RUN for c in ./clients/ts ../*/clients/ts; do \
       [ -f "$c/package.json" ] || continue; \
       ( cd "$c" && npm ci --no-audit --no-fund && npm run build ); \
     done
