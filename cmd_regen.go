@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ChristopherScot/homelabctl/internal/apiclient"
 	"github.com/ChristopherScot/homelabctl/internal/config"
 	"github.com/ChristopherScot/homelabctl/internal/runtime"
 	"github.com/spf13/cobra"
@@ -140,6 +141,17 @@ func runRegen(cfgPath string, checkOnly bool) error {
 			return fmt.Errorf("write %s: %w", path, err)
 		}
 		fmt.Println("  updated:", path)
+	}
+
+	// Files this tool used to write and no longer does. Writing the
+	// current list leaves the dropped ones on disk, unmanaged, in a
+	// service that was scaffolded before they were dropped.
+	removed, err := apiclient.RemoveRetired(filepath.Join(dir, "api"))
+	if err != nil {
+		return err
+	}
+	for _, name := range removed {
+		fmt.Println("  removed: api/" + name + " (no longer generated)")
 	}
 
 	// Generate AFTER the templates, not before.

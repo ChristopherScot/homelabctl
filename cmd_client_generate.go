@@ -264,7 +264,7 @@ func generateGoClient(dir, name, apiVersion string, c clientSpec, specPath strin
 	if err != nil {
 		return err
 	}
-	if err := writeSupportFiles(out, apiclient.Go, apiclient.Params{
+	if err := syncSupportFiles(out, apiclient.Go, apiclient.Params{
 		Name: name, Version: apiVersion, Package: pkg,
 		HasSecurity: hasSecurity,
 	}); err != nil {
@@ -304,7 +304,7 @@ func generateTSClient(dir, name, apiVersion string, c clientSpec, specPath strin
 	if err := apiclient.MarkGenerated(filepath.Join(out, "generated")); err != nil {
 		return err
 	}
-	if err := writeSupportFiles(out, apiclient.TypeScript, apiclient.Params{
+	if err := syncSupportFiles(out, apiclient.TypeScript, apiclient.Params{
 		Name: name, Version: apiVersion,
 		// Published is left false: this client lives in the repo that
 		// generated it, so a consumer imports the directory rather
@@ -413,15 +413,20 @@ func toOpenAPI3(raw []byte, dir, name string) ([]byte, bool, error) {
 	return b, true, nil
 }
 
-// writeSupportFiles puts a client's hand-written half - the retries,
-// circuit breaker, Retry-After handling and timeout - beside the code
-// the generator produced.
+// syncSupportFiles makes out match the client's hand-written half -
+// the retries, circuit breaker, Retry-After handling and timeout -
+// beside the code the generator produced.
 //
 // Without it `client generate` emitted typed operations and nothing
 // else, so a client for a rate-limited API retried nothing and read
 // no Retry-After. That half is most of the reason to generate a client
 // with this tool rather than running ogen or hey-api directly.
-func writeSupportFiles(out string, set func(apiclient.Params) ([]apiclient.File, error), p apiclient.Params) error {
+//
+// Sync rather than write: it also removes the files this tool used to
+// write and no longer does. A caller must not be able to do one
+// without the other, or a dropped file lives on in the output
+// directory with nobody left to update it.
+func syncSupportFiles(out string, set func(apiclient.Params) ([]apiclient.File, error), p apiclient.Params) error {
 	files, err := set(p)
 	if err != nil {
 		return err
@@ -430,6 +435,17 @@ func writeSupportFiles(out string, set func(apiclient.Params) ([]apiclient.File,
 		if err := os.WriteFile(filepath.Join(out, f.Path), []byte(f.Body), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", f.Path, err)
 		}
+	}
+	removed, err := apiclient.RemoveRetired(out)
+	if err != nil {
+		return err
+	}
+	// Say so. Everything else this command does prints, and a
+	// deletion in someone else's repo is the one that most needs to -
+	// it is what tells a consumer who had edited the file to reach
+	// for git.
+	for _, name := range removed {
+		fmt.Printf("  removed %s (no longer generated)\n", filepath.Join(out, name))
 	}
 	return nil
 }
