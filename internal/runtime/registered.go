@@ -56,9 +56,9 @@ func init() {
 			// and the manifest can live where it belongs.
 			"clients_ts_package.json.tmpl":         {dst: "clients/ts/package.json", specOnly: true, regen: true},
 			"clients_ts_index.ts.tmpl":             {dst: "clients/ts/index.ts", specOnly: true, regen: true},
-			"clients_ts_resilience.js.tmpl":        {dst: "clients/ts/resilience.js", specOnly: true, regen: true},
-			"clients_ts_resilience.d.ts.tmpl":      {dst: "clients/ts/resilience.d.ts", specOnly: true, regen: true},
+			"clients_ts_resilience.ts.tmpl":        {dst: "clients/ts/resilience.ts", specOnly: true, regen: true},
 			"clients_ts_openapi_ts_config.ts.tmpl": {dst: "clients/ts/openapi-ts.config.ts", specOnly: true, regen: true},
+			"clients_ts_tsconfig.json.tmpl":        {dst: "clients/ts/tsconfig.json", specOnly: true, regen: true},
 
 			"gitignore.tmpl": {dst: ".gitignore"},
 			"Makefile.tmpl":  {dst: "Makefile"},

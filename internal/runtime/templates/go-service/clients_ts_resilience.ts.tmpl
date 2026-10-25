@@ -20,33 +20,53 @@ import { createClient as createGeneratedClient, createConfig } from './generated
 // disagree with the version a consumer installed.
 import pkg from './package.json' with { type: 'json' }
 
-export const ClientVersion = pkg.version
+export const ClientVersion: string = pkg.version
 export const ClientVersionHeader = 'Client-Version'
 
 // Set via createClient({ name: 'my-service' }); No X- prefix on either:
 // RFC 6648 deprecated it in 2012.
 export const ClientNameHeader = 'Client-Name'
 
+export interface RetryPolicy {
+  backoffs(): number[]
+  retry(req: Request, res: Response | undefined, err: unknown): boolean
+}
+
+export interface ClientOptions {
+  baseUrl: string
+  /** The CALLER's own service name, sent as Client-Name so a runaway
+   *  client can be attributed. */
+  name?: string
+  /** Bounds a single attempt. Default 5000; a retry gets its own. */
+  timeoutMs?: number
+  /** Default singleRetry. */
+  policy?: RetryPolicy
+  /** Omit to disable circuit breaking. */
+  breaker?: Breaker
+  /** Bounds Retry-After. Default 30000. */
+  maxRetryAfterMs?: number
+}
+
 // A POST may already have applied, so retrying it can create a second thing.
 const IDEMPOTENT = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'])
 
-function retryable(req, res, err) {
+function retryable(req: Request, res: Response | undefined, err: unknown): boolean {
   if (!IDEMPOTENT.has(req.method)) return false
   if (err !== undefined) return true
   return res !== undefined && (res.status === 429 || res.status >= 500)
 }
 
 // One retry, a second later. The default.
-export const singleRetry = {
+export const singleRetry: RetryPolicy = {
   backoffs: () => [1000],
   retry: retryable,
 }
 
 // Five jittered attempts, for a slow-but-not-broken dependency. Jitter
 // so a fleet of callers does not retry in lockstep.
-export const exponentialRetry = {
+export const exponentialRetry: RetryPolicy = {
   backoffs: () => {
-    const out = []
+    const out: number[] = []
     let next = 100
     for (let i = 0; i < 5; i++) {
       out.push(next + (Math.random() * 2 - 1) * 0.25 * next)
@@ -57,12 +77,12 @@ export const exponentialRetry = {
   retry: retryable,
 }
 
-export const noRetry = { backoffs: () => [], retry: () => false }
+export const noRetry: RetryPolicy = { backoffs: () => [], retry: () => false }
 
 // Reads the server's own answer to "when should I come back". RFC 9110
 // allows either a delay in seconds or an HTTP-date. Capped so an
 // hour-long value cannot masquerade as a hang.
-export function retryAfterMs(res, maxMs) {
+export function retryAfterMs(res: Response | undefined, maxMs: number): number | undefined {
   const v = res?.headers?.get('retry-after')
   if (!v) return undefined
 
@@ -89,13 +109,15 @@ export class CircuitOpenError extends Error {
 export class Breaker {
   #failures = 0
   #openedAt = 0
+  readonly threshold: number
+  readonly cooldownMs: number
 
   constructor(threshold = 5, cooldownMs = 30_000) {
     this.threshold = threshold
     this.cooldownMs = cooldownMs
   }
 
-  allow() {
+  allow(): boolean {
     if (this.#failures < this.threshold) return true
     if (Date.now() - this.#openedAt > this.cooldownMs) {
       this.#failures = 0 // half-open: one probe decides whether to close
@@ -104,7 +126,7 @@ export class Breaker {
     return false
   }
 
-  record(failed) {
+  record(failed: boolean): void {
     if (!failed) {
       this.#failures = 0
       return
@@ -114,13 +136,8 @@ export class Breaker {
   }
 }
 
-/**
- * @param {object} options
- * @param {string} options.baseUrl
- * @param {number} [options.timeoutMs=5000] bounds a single attempt.
- * @param {object} [options.policy=singleRetry]
- * @param {Breaker} [options.breaker] omit to disable circuit breaking.
- */
+/** A configured transport for the generated operations. Pass it as
+ *  `{ client }` to any of them. */
 export function createClient({
   baseUrl,
   // CALLER's own service name, sent as Client-Name.
@@ -129,8 +146,8 @@ export function createClient({
   policy = singleRetry,
   breaker,
   maxRetryAfterMs = 30_000,
-}) {
-  const resilientFetch = async (input, init) => {
+}: ClientOptions) {
+  const resilientFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input, init)
     req.headers.set(ClientVersionHeader, ClientVersion)
     if (name) req.headers.set(ClientNameHeader, name)
@@ -138,8 +155,8 @@ export function createClient({
     if (breaker && !breaker.allow()) throw new CircuitOpenError()
 
     const backoffs = policy.backoffs()
-    let res
-    let err
+    let res: Response | undefined
+    let err: unknown
 
     for (let attempt = 0; ; attempt++) {
       err = undefined
@@ -159,11 +176,41 @@ export function createClient({
 
     breaker?.record(err !== undefined || (res !== undefined && res.status >= 500))
     if (err !== undefined) throw err
+    if (res === undefined) {
+      // Unreachable: the loop leaves res set unless it also set err,
+      // which threw above. Stated rather than asserted, so the day
+      // someone adds a path out of the loop they get this instead of
+      // a client handed undefined.
+      throw new Error('request produced neither a response nor an error')
+    }
     return res
   }
 
-  // THE ADAPTER. The one line that knows which generator produced the
-  // operations: it hands them a configured transport. Everything the
-  // generator needs is a baseUrl and a fetch.
-  return createGeneratedClient(createConfig({ baseUrl, fetch: resilientFetch }))
+  // THE ADAPTER. The one place that knows which generator produced the
+  // operations: it hands them a configured transport.
+  const client = createGeneratedClient(createConfig({ baseUrl, fetch: resilientFetch }))
+
+  // Keep fetch's own split between the two kinds of failure.
+  //
+  // An HTTP error status is an ANSWER: the server replied, and the
+  // reply is "no". Callers branch on those - 401 means re-auth, 409
+  // means conflict - so they arrive as { error }, and throwing would
+  // wrap ordinary control flow in try/catch.
+  //
+  // A transport failure is NOT an answer. There is no status, nothing
+  // to branch on, and the caller can only give up. fetch rejects for
+  // these and resolves for the first; the generated client returns
+  // { error } for both, so this puts the distinction back.
+  //
+  // `response` is undefined exactly when the request never completed,
+  // which is the test. throwOnError is not usable here: it throws for
+  // a 404 too.
+  client.interceptors.error.use((error, response) => {
+    if (response === undefined) {
+      throw error instanceof Error ? error : new Error('request did not complete', { cause: error })
+    }
+    return error
+  })
+
+  return client
 }
