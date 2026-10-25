@@ -832,7 +832,7 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 	if !ok {
 		t.Fatal("no clients/ts/openapi-ts.config.ts")
 	}
-	if !strings.Contains(cfg, "'./generated'") {
+	if !strings.Contains(cfg, `"./generated"`) {
 		t.Error("the generator writes beside the hand-written client files; it clears that directory on every run")
 	}
 

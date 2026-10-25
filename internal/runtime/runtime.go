@@ -96,7 +96,15 @@ func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 // client cannot end up with different output layouts - the hand-written
 // files live above the directory hey-api clears, and that is only true
 // if both configs say so.
-func (p Params) HeyAPIConfig() string { return codegen.HeyAPIConfig("../../openapi.yml") }
+//
+// Relative, unlike the third-party case: this file is COMMITTED to the
+// service's repo and read on other machines, where an absolute path
+// from the machine that scaffolded it would point at nothing. It
+// resolves correctly because a scaffolded client sits at its own
+// package root, which is where npx puts the working directory.
+func (p Params) HeyAPIConfig() string {
+	return codegen.HeyAPIConfigAtRoot("../../openapi.yml")
+}
 
 // BinaryName is what `go build` with no -o produces: the last element of
 // the module path, which is not always the service name. The repo
