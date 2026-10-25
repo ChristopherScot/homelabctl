@@ -1,5 +1,6 @@
-v1.20.3
+v1.21.0
 
+v1.21.0 generated clients carry their resilience layer, both languages
 v1.20.3 --overwrite edits a service; it never creates a repo
 v1.20.2 a consumer builds the generated client it depends on
 v1.20.1 a sibling service installing the client gets it built
