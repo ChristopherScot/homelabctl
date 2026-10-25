@@ -58,6 +58,45 @@ export interface ClientOptions {
   maxRetryAfterMs?: number
 }
 
+/** What one request says about the service's health.
+ *
+ *  Three values, not two: "this tells us nothing" is different from
+ *  "this went fine". A breaker that treats them alike lets an ignored
+ *  outcome ERASE a run of real failures - a service answering 500 on
+ *  one route and 501 on another never trips, because each 501 zeroes
+ *  the count the 500s built up.
+ *
+ *  sony/gobreaker draws the same three-way line: a success clears the
+ *  consecutive-failure count, a failure increments it, and an
+ *  exclusion touches neither. */
+export type Outcome = 'healthy' | 'unwell' | 'ignore'
+
+/** A permanent statement about THIS REQUEST rather than evidence
+ *  about the service: the route is not implemented (501), or the
+ *  HTTP version is not spoken (505). Neither changes after a
+ *  cooldown, so neither is worth a retry or a place in the count. */
+function permanentProtocolError(status: number): boolean {
+  return status === 501 || status === 505
+}
+
+function classify(
+  res: Response | undefined,
+  err: unknown,
+  caller: AbortSignal | undefined
+): Outcome {
+  if (err !== undefined) {
+    // Whose signal aborted? Our own per-attempt timeout arrives as
+    // an abort too, and a service too slow to answer within it IS
+    // unwell - that is a case the breaker exists for. So the
+    // question is not what the error says, it is whether the
+    // CALLER's signal is the one that fired.
+    return caller?.aborted === true ? 'ignore' : 'unwell'
+  }
+  if (res === undefined) return 'ignore'
+  if (permanentProtocolError(res.status)) return 'ignore'
+  return res.status >= 500 ? 'unwell' : 'healthy'
+}
+
 /** A backoff that a caller can cut short. Rejects with the signal's
  *  own reason, so an aborted call fails the way fetch would have. */
 function abortableDelay(ms: number, signal?: AbortSignal | null): Promise<void> {
@@ -81,7 +120,11 @@ const IDEMPOTENT = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'])
 function retryable(req: Request, res: Response | undefined, err: unknown): boolean {
   if (!IDEMPOTENT.has(req.method)) return false
   if (err !== undefined) return true
-  return res !== undefined && (res.status === 429 || res.status >= 500)
+  if (res === undefined) return false
+  // Same carve-out the breaker makes: a permanently unimplemented
+  // route does not become implemented on the next attempt.
+  if (permanentProtocolError(res.status)) return false
+  return res.status === 429 || res.status >= 500
 }
 
 // One retry, a second later. The default.
@@ -146,16 +189,18 @@ export class Breaker {
   #failures = 0
   #probing = false
   #openedAt = 0
-  readonly threshold: number
+  readonly failedRequests: number
   readonly cooldownMs: number
 
-  constructor(threshold = 5, cooldownMs = 30_000) {
-    this.threshold = threshold
+  /** failedRequests is how many consecutive failed REQUESTS open the
+   *  circuit. A request that exhausted its retries counts once. */
+  constructor(failedRequests = 5, cooldownMs = 30_000) {
+    this.failedRequests = failedRequests
     this.cooldownMs = cooldownMs
   }
 
   allow(): boolean {
-    if (this.#failures < this.threshold) return true
+    if (this.#failures < this.failedRequests) return true
     // Open. One caller past the cooldown gets through to find out
     // whether the dependency is back; everyone else waits for its
     // verdict rather than joining it. Zeroing the count here instead
@@ -168,11 +213,21 @@ export class Breaker {
     return false
   }
 
-  record(failed: boolean): void {
+  record(o: Outcome): void {
+    // Taken back before the ignore branch returns: a probe that is
+    // never returned wedges the breaker closed for good.
     const probe = this.#probing
     this.#probing = false
 
-    if (!failed) {
+    if (o === 'ignore') {
+      // An inconclusive probe still spends the slot. We learned
+      // nothing, so the dependency is still presumed down - and
+      // without re-arming, the cooldown has already elapsed, so the
+      // next caller gets another probe, and the next.
+      if (probe) this.#openedAt = Date.now()
+      return
+    }
+    if (o === 'healthy') {
       this.#failures = 0
       return
     }
@@ -181,7 +236,7 @@ export class Breaker {
     // land afterwards, and with === their failures would not move the
     // clock, so the cooldown would expire early. A failed probe
     // re-arms it - the dependency is still down.
-    if (this.#failures >= this.threshold || probe) this.#openedAt = Date.now()
+    if (this.#failures >= this.failedRequests || probe) this.#openedAt = Date.now()
   }
 }
 
@@ -263,7 +318,7 @@ export function createResilientFetch({
       }
 
     } finally {
-      breaker?.record(err !== undefined || (res !== undefined && res.status >= 500))
+      breaker?.record(classify(res, err, caller))
     }
 
     if (err !== undefined) throw err
