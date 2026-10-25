@@ -1,5 +1,7 @@
 package runtime
 
+import "github.com/ChristopherScot/homelabctl/internal/codegen"
+
 // The runtimes that ship with homelabctl. Adding a language means adding a
 // directory under templates/ and an entry here - no other code changes.
 func init() {
@@ -15,7 +17,7 @@ func init() {
 			// TypeScript ^5 and breaks on 7; running it through npx
 			// keeps that constraint out of the service's own
 			// dependencies, which stay current.
-			{"npx", "--yes", "openapi-typescript@7", "openapi.yml", "-o", "clients/ts/schema.d.ts"},
+			codegen.TypescriptCommand("openapi.yml", "clients/ts/schema.d.ts"),
 		},
 		// Without go.sum the service does not build at all.
 		lock: [][]string{{"go", "mod", "tidy"}},
