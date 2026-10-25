@@ -889,6 +889,14 @@ func setupLocal(o initOpts, c *config.Config, r runtime.Runtime, dir string) err
 			}
 			return nil
 		}
+		// --overwrite names the files to rewrite, so a file that does
+		// not exist yet is not one of them. Writing it anyway made
+		// `--overwrite Dockerfile` create a .github/ in the service
+		// directory, where CI for a monorepo service does not live.
+		if len(o.overwrite) > 0 && !o.overwrite[path] {
+			skipped = append(skipped, path)
+			return nil
+		}
 		if err := writeFile(full, body); err != nil {
 			return err
 		}

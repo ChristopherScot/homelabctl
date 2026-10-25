@@ -143,6 +143,47 @@ func TestModulePath(t *testing.T) {
 // is what makes them editable - and also means a template fix cannot
 // reach a service that already exists. --force is how one is pulled in,
 // and it must touch only what it names.
+// --overwrite names the files to rewrite, and a file that does not
+// exist in the service is not one of them.
+//
+// put only consulted o.overwrite for files that already existed, so
+// everything else was written unconditionally: `--overwrite
+// Dockerfile` in a monorepo service also created a .github/ there,
+// where that service's CI does not live.
+func TestOverwriteWritesNoFileItDidNotName(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "Dockerfile")
+	if err := os.WriteFile(target, []byte("# mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	o := initOpts{
+		name: "svc", runtimeID: "go-service", owner: "o", yes: true,
+		localOnly: true, skipTidy: true,
+		overwrite: map[string]bool{"Dockerfile": true},
+	}
+	if err := runInit(o); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		switch e.Name() {
+		case "Dockerfile":
+		case config.SchemaFileName:
+			// Deliberately unconditional: a cache of a constant in this
+			// binary, which a stale copy silently contradicts. See
+			// config.WriteSchema.
+		default:
+			t.Errorf("--overwrite Dockerfile also wrote %s", e.Name())
+		}
+	}
+}
+
 // --overwrite edits a service that already exists, so it must never
 // reach the remote setup that creates a GitHub repository.
 //
