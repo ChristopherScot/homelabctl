@@ -15,6 +15,19 @@ COPY . .
 
 WORKDIR /repo/{{ .ServiceDir }}
 
+# Build any generated client this service depends on BEFORE installing.
+#
+# A `file:` dependency ships TypeScript sources and compiles to dist/,
+# and npm's install hooks cannot be relied on to do it: prepublishOnly
+# is skipped by `npm pack`, prepack is skipped for a `file:` dep, and
+# whether prepare gets the dep's devDependencies installed differs
+# between npm patch releases - 11.19.0 built it, 11.19.1 failed with
+# "tsc: not found". Doing it explicitly depends on none of that.
+RUN for c in ../*/clients/ts; do \
+      [ -f "$c/package.json" ] || continue; \
+      ( cd "$c" && npm ci --no-audit --no-fund && npm run build ); \
+    done
+
 # Dev deps included: the bundler and TypeScript are devDependencies and
 # neither ends up in the image.
 RUN npm ci

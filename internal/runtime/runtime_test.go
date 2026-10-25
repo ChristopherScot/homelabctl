@@ -804,7 +804,7 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 	if !hasPkg {
 		t.Fatal("no clients/ts/package.json")
 	}
-	for _, want := range []string{`"main": "dist/index.js"`, `"types": "dist/index.d.ts"`, `"prepare"`} {
+	for _, want := range []string{`"main": "dist/index.js"`, `"types": "dist/index.d.ts"`, `"prepack"`} {
 		if !strings.Contains(pkg, want) {
 			t.Errorf("the published package does not declare %s; it would ship unbuilt TypeScript", want)
 		}
@@ -2212,5 +2212,33 @@ func TestReleaseGateFailsClosedOnAnErrorItCannotClassify(t *testing.T) {
 		if strings.Contains(yaml, `gh release view "$tag" >/dev/null 2>&1`) {
 			t.Errorf("%s: gate still treats any non-zero exit as not-released", name)
 		}
+	}
+}
+
+// A node service that depends on a generated client in a sibling
+// directory has to build it before installing. npm's install hooks
+// cannot be relied on for this: prepack is skipped for a `file:`
+// dependency, and whether prepare gets that dependency's
+// devDependencies installed changed between npm 11.19.0 and 11.19.1 -
+// the first built it, the second failed with "tsc: not found".
+func TestNodeServiceBuildsASiblingClient(t *testing.T) {
+	r, err := Get("node-service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dockerfile := r.Artifacts(Params{Name: "web", Module: "github.com/o/r/services/web", Spec: true}).Dockerfile
+	if dockerfile == "" {
+		t.Fatal("node-service has no Dockerfile")
+	}
+	// The RUN line, not any mention of the path: a comment names
+	// `file:../<api>/clients/ts` too, and asserting on the bare path
+	// passes with the build step deleted.
+	build := "for c in ../*/clients/ts"
+	if !strings.Contains(dockerfile, build) {
+		t.Error("the Dockerfile does not build a sibling generated client before npm ci")
+	}
+	// Before `npm ci`, or the install resolves main into an empty dist.
+	if strings.Index(dockerfile, build) > strings.Index(dockerfile, "RUN npm ci") {
+		t.Error("the client is built after npm ci, which is too late")
 	}
 }
