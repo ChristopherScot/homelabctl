@@ -294,6 +294,14 @@ generator:
   # missing from the generated client. Prefer naming them over "all",
   # so a new unsupported construct is a visible failure rather than a
   # method that silently stops existing.
+  #
+  # Check that the result COMPILES after adding one. Skipping is not
+  # always clean: some features emit a package that does not build
+  # rather than one missing those operations - "type-based
+  # discrimination with same jxType" can generate a type switch with a
+  # duplicate case. When that happens the spec cannot be generated
+  # from, and the honest answer is to say so rather than ship a
+  # package that does not build.
   ignore_not_implemented:
     - "complex form schema"
 `

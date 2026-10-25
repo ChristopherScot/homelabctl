@@ -4,9 +4,9 @@
 // A spec you own is kept generatable by the CI that generates from it. A
 // spec you merely consume is not: it is published by someone with no
 // reason to care whether ogen accepts it, and it changes when they
-// change it. Zoom's published spec is Swagger 2.0 and holds a component
-// name used for two incompatible types - neither of which their own
-// users can fix.
+// change it. A published spec may be Swagger 2.0, or hold one component
+// name used for two incompatible types, or repeat a value in an enum -
+// none of which its consumers can fix at the source.
 //
 // So the spec is treated as INPUT, and the edits that make it
 // generatable are committed beside it as data. Reapplying them is part
@@ -112,10 +112,23 @@ func applySet(doc map[string]any, op Op) (string, error) {
 		return "", fmt.Errorf("%s does not exist; set corrects a value, it does not add one", op.Path)
 	}
 	parent[key] = op.Value
-	// %#v, not %v: these patches exist to correct a value whose TYPE is
-	// wrong, and %v renders 1 and "1" identically - so a patch that
-	// changed nothing reported "1 -> 1" and read like it had worked.
-	return fmt.Sprintf("set %s: %#v -> %#v", op.Path, old, op.Value), nil
+	return fmt.Sprintf("set %s: %s -> %s", op.Path, describe(old), describe(op.Value)), nil
+}
+
+// describe renders a patched value for the progress line.
+//
+// %#v for scalars, because these patches exist to correct a value whose
+// TYPE is wrong and %v renders 1 and "1" identically - a patch that
+// changed nothing reported "1 -> 1" and read like it had worked.
+//
+// Lists are summarised instead: a deduplicated 10-value enum printed in
+// full twice is three lines of noise that buries the other patches in
+// the same run.
+func describe(v any) string {
+	if list, ok := v.([]any); ok {
+		return fmt.Sprintf("%d value(s)", len(list))
+	}
+	return fmt.Sprintf("%#v", v)
 }
 
 func applyRemove(doc map[string]any, op Op) (string, error) {

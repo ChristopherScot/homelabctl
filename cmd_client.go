@@ -18,10 +18,10 @@ import (
 //
 // The rest of this tool is for a service whose spec you write: init
 // scaffolds the server, regen keeps the clients level with it, and CI
-// fails when they drift. None of that applies to Zoom. You do not own
-// their spec, cannot fix it, and get a new one whenever they ship one -
-// so the spec is an input to be fetched and corrected rather than a
-// source file to be maintained.
+// fails when they drift. None of that applies to an API somebody else
+// publishes. You do not own their spec, cannot fix it, and get a new
+// one whenever they ship one - so the spec is an input to be fetched
+// and corrected rather than a source file to be maintained.
 //
 // That inversion is why this is its own command group rather than a flag
 // on regen: regen asks "is the generated code level with MY spec", and
@@ -124,8 +124,8 @@ build does not depend on a third party being reachable. --refresh
 re-fetches it, which is how an upstream change enters the repo: as a
 reviewable diff.`,
 		Example: `  homelabctl client generate
-  homelabctl client generate zoom --refresh
-  homelabctl client generate --spec ./zoom.json --out ./internal/zoomapi`,
+  homelabctl client generate acme --refresh
+  homelabctl client generate --spec ./acme.json --out ./internal/acmeapi`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			// --spec is the no-manifest path: one client, named by its
 			// output directory, nothing committed. It exists so a spec

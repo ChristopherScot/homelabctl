@@ -1,7 +1,7 @@
 # Clients for APIs you do not own
 
 `homelabctl client` generates typed Go and TypeScript clients from
-somebody else's OpenAPI spec — Zoom's, say — so you call their API
+somebody else's OpenAPI spec, so you call their API
 through generated code instead of a hand-written wrapper.
 
 ```sh
@@ -27,13 +27,13 @@ Declare what you consume in `clients.yaml`:
 
 ```yaml
 clients:
-  zoom:
-    spec: https://example.com/zoom/openapi.json
-    vendor: specs/zoom.json
-    patches: [patches/zoom.yaml]
-    out: ./internal/zoomapi
+  acme:
+    spec: https://api.acme.example/openapi.json
+    vendor: specs/acme.json
+    patches: [patches/acme.yaml]
+    out: ./internal/acmeapi
     languages: [go]
-    package: zoomapi
+    package: acmeapi
 ```
 
 | field | meaning |
@@ -49,14 +49,14 @@ Then:
 
 ```sh
 homelabctl client generate              # every client
-homelabctl client generate zoom         # just one
+homelabctl client generate acme         # just one
 homelabctl client list                  # what is declared
 ```
 
 To try a spec before committing to it, skip the manifest:
 
 ```sh
-homelabctl client generate --spec ./zoom.json --out ./internal/zoomapi
+homelabctl client generate --spec ./acme.json --out ./internal/acmeapi
 ```
 
 ## Why the spec is vendored
@@ -69,30 +69,22 @@ they are down, and silently changes behaviour when they ship a new spec.
 Vendoring turns an upstream change into a reviewable diff.
 
 ```sh
-homelabctl client generate zoom --refresh
+homelabctl client generate acme --refresh
 ```
 
-re-fetches, and the diff on `specs/zoom.json` shows exactly what they
+re-fetches, and the diff on `specs/acme.json` shows exactly what they
 changed.
 
 ## Patches
 
-A spec you do not own may not generate. Zoom's, for example, is Swagger
-2.0 and contains four defects that stop ogen outright.
-
-Conversion to OpenAPI 3 is automatic. The rest go in a patch file, which
-is committed, applied in order, and reapplied on every generation:
+A spec you do not own may not generate. Conversion from Swagger 2.0 to
+OpenAPI 3 is automatic; everything else goes in a patch file, which is
+committed, applied in order, and reapplied on every generation:
 
 ```yaml
-- op: rename-component
-  from: parameters/RegistrantStatus
-  to: parameters/RegistrantStatusParam
-  why: collides with components/schemas/RegistrantStatus; ogen cannot emit two types with one name
-
-- op: set
-  path: /components/schemas/UserSettingsRecording/properties/auto_delete_cmr_days/default
-  value: 0
-  why: upstream declares type integer with default false
+- op: remove
+  path: /paths/~1widgets~1{id}/delete/requestBody
+  why: upstream declares a requestBody with no content on a DELETE; invalid per OpenAPI and rejected by ogen
 ```
 
 Three operations are available:
@@ -113,12 +105,34 @@ Patch paths are written against **OpenAPI 3**, after conversion. A
 Swagger 2.0 document keeps `parameters` and `definitions` at the root,
 but by the time patches run those have moved under `components`.
 
+### Patches vs. generator settings
+
+Not every failure is a spec defect. Two different things go wrong:
+
+- **The spec is wrong** — a duplicate enum value, a `requestBody` with
+  no content, a `$ref` to a schema that does not exist. Fix these with
+  a patch.
+- **ogen cannot express something valid** — reported as
+  `Feature "<name>" is not implemented yet`. Add the name to
+  `ignore_not_implemented` in the generated `ogen.yml`, which is
+  written once and yours to edit.
+
+**Check that the result compiles after skipping a feature.** Skipping is
+not always clean — some features emit a package that does not build
+rather than one missing those operations. `type-based discrimination
+with same jxType` is one: it can generate a type switch with a
+duplicate case. When that happens the spec genuinely cannot be
+generated from today, and the honest answer is to say so rather than
+ship a package that does not build.
+
 ### Finding what to patch
 
 Run the command and read the error. ogen names the offending location:
 
 ```
 expected schema type is "string", default value is int64
+duplicate enum value: "in_app_chat"
+content must have at least one entry
 ```
 
 Each fix tends to reveal the next, so expect to iterate a few times on
@@ -128,7 +142,7 @@ upstream changes that part of the spec.
 ## When upstream changes
 
 ```sh
-homelabctl client generate zoom --refresh
+homelabctl client generate acme --refresh
 ```
 
 Review the diff on the vendored spec, then regenerate. If a patch no

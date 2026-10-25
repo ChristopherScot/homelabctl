@@ -270,3 +270,26 @@ func TestApplyLeavesDocumentPartiallyModifiedOnError(t *testing.T) {
 		t.Error("the first op was unwound; Apply documents that it is not")
 	}
 }
+
+// The progress line must distinguish 1 from "1" - these patches exist
+// to correct values whose type is wrong - while not dumping a
+// deduplicated enum twice.
+func TestSetProgressLineShowsTypeAndSummarisesLists(t *testing.T) {
+	var d map[string]any
+	if err := json.Unmarshal([]byte(`{"a":{"n":1,"e":["x","x","y"]}}`), &d); err != nil {
+		t.Fatal(err)
+	}
+	notes, err := Apply(d, []Op{
+		{Op: "set", Path: "/a/n", Value: "1", Why: "type mismatch"},
+		{Op: "set", Path: "/a/e", Value: []any{"x", "y"}, Why: "duplicate enum value"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(notes[0], `1 -> "1"`) {
+		t.Errorf("a type change must be visible, got: %s", notes[0])
+	}
+	if !strings.Contains(notes[1], "3 value(s) -> 2 value(s)") {
+		t.Errorf("a list should be summarised, got: %s", notes[1])
+	}
+}
