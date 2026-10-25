@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ChristopherScot/homelabctl/internal/apiclient"
 	"github.com/ChristopherScot/homelabctl/internal/apispec"
 	"github.com/ChristopherScot/homelabctl/internal/codegen"
 	"gopkg.in/yaml.v3"
@@ -100,6 +101,17 @@ func generateClient(dir, name string, c clientSpec, refresh bool) error {
 		return fmt.Errorf("writing patched spec: %w", err)
 	}
 
+	// Client-Version reports the version of the API this client was
+	// generated against, which is the spec's own info.version. A spec
+	// without one is not an error: the header says "unknown" rather
+	// than claiming a version nobody published.
+	apiVersion := "unknown"
+	if info, ok := doc["info"].(map[string]any); ok {
+		if v, ok := info["version"].(string); ok && v != "" {
+			apiVersion = v
+		}
+	}
+
 	langs := c.Languages
 	if len(langs) == 0 {
 		langs = []string{"go"}
@@ -107,11 +119,11 @@ func generateClient(dir, name string, c clientSpec, refresh bool) error {
 	for _, lang := range langs {
 		switch lang {
 		case "go":
-			if err := generateGoClient(dir, name, c, tmp.Name()); err != nil {
+			if err := generateGoClient(dir, name, apiVersion, c, tmp.Name()); err != nil {
 				return err
 			}
 		case "ts":
-			if err := generateTSClient(dir, name, c, tmp.Name()); err != nil {
+			if err := generateTSClient(dir, name, apiVersion, c, tmp.Name()); err != nil {
 				return err
 			}
 		default:
@@ -213,7 +225,7 @@ func loadPatches(dir string, paths []string) ([]apispec.Op, error) {
 // ogen.yml is written beside the output rather than passed as flags so
 // the generator settings are visible and editable in the repo, the way
 // a scaffolded service's is.
-func generateGoClient(dir, name string, c clientSpec, specPath string) error {
+func generateGoClient(dir, name, apiVersion string, c clientSpec, specPath string) error {
 	out := filepath.Join(dir, c.Out)
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return fmt.Errorf("creating %s: %w", c.Out, err)
@@ -245,6 +257,11 @@ func generateGoClient(dir, name string, c clientSpec, specPath string) error {
 	if err := runIn("generating the Go client for "+name, dir, argv...); err != nil {
 		return err
 	}
+	if err := writeSupportFiles(out, apiclient.Go, apiclient.Params{
+		Name: name, Version: apiVersion, Package: pkg,
+	}); err != nil {
+		return err
+	}
 	fmt.Printf("  go: %s\n", c.Out)
 	return nil
 }
@@ -256,7 +273,7 @@ func generateGoClient(dir, name string, c clientSpec, specPath string) error {
 // The config is written next to the output, and hey-api reads it from
 // there - it clears its output directory on every run, so that
 // directory holds nothing else.
-func generateTSClient(dir, name string, c clientSpec, specPath string) error {
+func generateTSClient(dir, name, apiVersion string, c clientSpec, specPath string) error {
 	out := filepath.Join(dir, c.Out)
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return fmt.Errorf("creating %s: %w", c.Out, err)
@@ -277,7 +294,17 @@ func generateTSClient(dir, name string, c clientSpec, specPath string) error {
 	if err := runIn("generating the TypeScript client for "+name, out, codegen.HeyAPICommand()...); err != nil {
 		return err
 	}
-	fmt.Printf("  ts: %s\n", filepath.Join(c.Out, "generated"))
+	if err := writeSupportFiles(out, apiclient.TypeScript, apiclient.Params{
+		Name: name, Version: apiVersion,
+		// Published is left false: this client lives in the repo that
+		// generated it, so a consumer imports the directory rather
+		// than a package name. See apiclient.Params for what else
+		// that decides.
+		ImportPath: filepath.ToSlash(c.Out),
+	}); err != nil {
+		return err
+	}
+	fmt.Printf("  ts: %s\n", c.Out)
 	return nil
 }
 
@@ -374,4 +401,25 @@ func toOpenAPI3(raw []byte, dir, name string) ([]byte, bool, error) {
 		return nil, false, fmt.Errorf("reading converted spec: %w", err)
 	}
 	return b, true, nil
+}
+
+// writeSupportFiles puts a client's hand-written half - the retries,
+// circuit breaker, Retry-After handling and timeout - beside the code
+// the generator produced.
+//
+// Without it `client generate` emitted typed operations and nothing
+// else, so a client for a rate-limited API retried nothing and read
+// no Retry-After. That half is most of the reason to generate a client
+// with this tool rather than running ogen or hey-api directly.
+func writeSupportFiles(out string, set func(apiclient.Params) ([]apiclient.File, error), p apiclient.Params) error {
+	files, err := set(p)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(out, f.Path), []byte(f.Body), 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", f.Path, err)
+		}
+	}
+	return nil
 }

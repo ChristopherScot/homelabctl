@@ -44,13 +44,9 @@ func init() {
 
 			// Everything openapi.yml feeds. Dropped for a service built
 			// without one, which has no spec to derive them from.
-			"openapi.yml.tmpl":    {dst: "openapi.yml", specOnly: true},
-			"generate.go.tmpl":    {dst: "generate.go", specOnly: true},
-			"ogen.yml.tmpl":       {dst: "ogen.yml", specOnly: true},
-			"client.go.tmpl":      {dst: "api/client.go", specOnly: true, regen: true},
-			"client_test.go.tmpl": {dst: "api/client_test.go", specOnly: true, regen: true},
-			"paging.go.tmpl":      {dst: "api/paging.go", specOnly: true, regen: true},
-			"paging_test.go.tmpl": {dst: "api/paging_test.go", specOnly: true, regen: true},
+			"openapi.yml.tmpl": {dst: "openapi.yml", specOnly: true},
+			"generate.go.tmpl": {dst: "generate.go", specOnly: true},
+			"ogen.yml.tmpl":    {dst: "ogen.yml", specOnly: true},
 
 			"scaffold_floor_test.go.tmpl": {dst: "scaffold_floor_test.go", plain: "scaffold_floor_test_plain.go.tmpl"},
 
@@ -63,8 +59,6 @@ func init() {
 			// is published to npmjs instead, so nothing installs from git
 			// and the manifest can live where it belongs.
 			"clients_ts_package.json.tmpl":         {dst: "clients/ts/package.json", specOnly: true, regen: true},
-			"clients_ts_index.ts.tmpl":             {dst: "clients/ts/index.ts", specOnly: true, regen: true},
-			"clients_ts_resilience.ts.tmpl":        {dst: "clients/ts/resilience.ts", specOnly: true, regen: true},
 			"clients_ts_openapi_ts_config.ts.tmpl": {dst: "clients/ts/openapi-ts.config.ts", specOnly: true, regen: true},
 			"clients_ts_tsconfig.json.tmpl":        {dst: "clients/ts/tsconfig.json", specOnly: true, regen: true},
 

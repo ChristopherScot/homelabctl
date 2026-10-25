@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"github.com/ChristopherScot/homelabctl/internal/apiclient"
 	"path"
 	"sort"
 	"strings"
@@ -112,6 +113,13 @@ func (e embedded) SpecFiles() []string {
 			out = append(out, t.dst)
 		}
 	}
+	// The client's hand-written half is owned by internal/apiclient
+	// rather than registered here, so it has to be listed from the
+	// same place Artifacts puts it - one inventory, asked twice, so
+	// adding a support file cannot reach new services only.
+	for _, f := range e.clientFiles(Params{Spec: true}) {
+		out = append(out, f.Path)
+	}
 	sort.Strings(out)
 	return out
 }
@@ -167,6 +175,12 @@ func (e embedded) render(name string, p Params) string {
 // kind is this?" - they ask what they were given.
 func (e embedded) Artifacts(p Params) Artifacts {
 	a := Artifacts{Files: e.renderFiles(p), Deployable: e.deployable, SelfUpdates: e.selfUpdates}
+	// The client's hand-written half - retries, breaker, Retry-After,
+	// timeout - comes from internal/apiclient, which owns it for every
+	// consumer. A client generated against a spec we do not own gets
+	// the same files from the same place; they were only ever under
+	// templates/go-service because this was the first caller.
+	a.Files = append(a.Files, e.clientFiles(p)...)
 	if e.deployable {
 		a.Dockerfile = e.render("Dockerfile", p)
 	}
@@ -224,6 +238,45 @@ func (e embedded) renderFiles(p Params) []File {
 			body = e.render(src, p)
 		}
 		out = append(out, File{Path: dst, Body: body})
+	}
+	return out
+}
+
+// clientFiles are the generated client's hand-written half, placed
+// where a scaffolded service keeps them.
+//
+// Empty without a spec: there is no generated client to support.
+func (e embedded) clientFiles(p Params) []File {
+	if !p.Spec || !e.deployable {
+		return nil
+	}
+	cp := apiclient.Params{
+		Name:    p.Name,
+		Version: p.SpecVersion,
+		Package: "api",
+		// A scaffolded service publishes its TypeScript client to npm
+		// under the owner's scope, so that is how a consumer imports it.
+		ImportPath: "@" + p.NPMScope() + "/" + p.Name + "-client",
+		Published:  true,
+	}
+
+	var out []File
+	goFiles, err := apiclient.Go(cp)
+	if err != nil {
+		// Only reachable if a template is missing from the binary,
+		// which is a build-time mistake rather than a runtime one -
+		// the same reasoning as read() above.
+		panic(err)
+	}
+	for _, f := range goFiles {
+		out = append(out, File{Path: "api/" + f.Path, Body: f.Body})
+	}
+	tsFiles, err := apiclient.TypeScript(cp)
+	if err != nil {
+		panic(err)
+	}
+	for _, f := range tsFiles {
+		out = append(out, File{Path: "clients/ts/" + f.Path, Body: f.Body})
 	}
 	return out
 }

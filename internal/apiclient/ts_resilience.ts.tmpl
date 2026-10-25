@@ -4,7 +4,7 @@
 // traffic to something already struggling), and a breaker - both
 // clients failing the same way is the point.
 //
-//   import { createClient, listThings } from '@{{ .NPMScope }}/{{ .Name }}-client'
+//   import { createClient, listThings } from '{{ .ImportPath }}'
 //   const client = createClient({ baseUrl: 'https://{{ .Name }}' })
 //   const { data, error } = await listThings({ client })
 //
@@ -14,13 +14,20 @@
 // bottom of this file - the Go client keeps the same seam, where
 // HTTPClient satisfies the generator's transport interface and the
 // retry logic is plain net/http.
-import { createClient as createGeneratedClient, createConfig } from './generated/client/index.ts'
+// /index.ts, not .ts: generated/client is a DIRECTORY, so a published
+// client names its entry file where the others name themselves.
+import { createClient as createGeneratedClient, createConfig } from './generated/client{{ if .Published }}/index.ts{{ end }}'
 
-// Read from package.json rather than hardcoded: the header cannot then
-// disagree with the version a consumer installed.
+{{ if .Published }}// Read from package.json rather than hardcoded: the header cannot then
+// disagree with the version a consumer installed, which is the one
+// that matters once this is on npm.
 import pkg from './package.json' with { type: 'json' }
 
-export const ClientVersion: string = pkg.version
+export const ClientVersion: string = pkg.version{{ else }}// Written in: this client ships inside the repo that generated it and
+// has no package.json to read. The value is the version of THEIR API
+// the spec declared, which is what a server reading Client-Version
+// wants to know.
+export const ClientVersion = '{{ .Version }}'{{ end }}
 export const ClientVersionHeader = 'Client-Version'
 
 // Set via createClient({ name: 'my-service' }); No X- prefix on either:
