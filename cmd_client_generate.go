@@ -294,6 +294,11 @@ func generateTSClient(dir, name, apiVersion string, c clientSpec, specPath strin
 	if err := runIn("generating the TypeScript client for "+name, out, codegen.HeyAPICommand()...); err != nil {
 		return err
 	}
+	// Mark the generator's output before the hand-written half goes
+	// in beside it: resilience.ts and index.ts are ours to lint.
+	if err := apiclient.MarkGenerated(filepath.Join(out, "generated")); err != nil {
+		return err
+	}
 	if err := writeSupportFiles(out, apiclient.TypeScript, apiclient.Params{
 		Name: name, Version: apiVersion,
 		// Published is left false: this client lives in the repo that
