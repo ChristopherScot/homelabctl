@@ -23,6 +23,20 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      # The TypeScript client's tests run under `node --test` with
+      # node stripping the types itself, so the test job needs a node
+      # and needs it to be a known one. Without this step it ran on
+      # whatever the runner image happened to ship, which is not a
+      # version anything here declares - and an older runtime reported
+      # five tests as "cancelled" with zero failures, which reads as a
+      # harness bug rather than a toolchain mismatch.
+      #
+      # 24 because that is the floor the generated services declare in
+      # their own package.json, so this tests what they run.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       # make test, not the commands themselves: the Makefile says it
       # runs "what CI runs", and that is only true if this IS it. This
       # repo generates that Makefile for every other service, so it is

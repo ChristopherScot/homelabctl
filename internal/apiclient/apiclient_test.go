@@ -80,17 +80,28 @@ func TestResilientFetchIsReachableWithoutCreateClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Exact paths, not suffixes: "resilience.test.ts" ends in
+	// "resilience.ts" too, and a suffix match picked whichever came
+	// first in tsFiles.
 	var resilience, index string
 	for _, f := range files {
-		switch {
-		case strings.HasSuffix(f.Path, "resilience.ts"):
+		switch f.Path {
+		case "resilience.ts":
 			resilience = f.Body
-		case strings.HasSuffix(f.Path, "index.ts"):
+		case "index.ts":
 			index = f.Body
 		}
 	}
-	if resilience == "" || index == "" {
-		t.Fatal("expected both resilience.ts and index.ts")
+	// Both named, because an empty one means the loop matched nothing
+	// and every assertion below would pass vacuously. That is how a
+	// suffix match on "resilience.ts" - which "resilience.test.ts"
+	// also satisfies - went unnoticed: it depended on the order of
+	// tsFiles, not on the paths being right.
+	if resilience == "" {
+		t.Fatal("no resilience.ts rendered")
+	}
+	if index == "" {
+		t.Fatal("no index.ts rendered")
 	}
 
 	if !strings.Contains(resilience, "export function createResilientFetch") {
