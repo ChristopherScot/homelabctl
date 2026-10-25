@@ -18,8 +18,8 @@ import (
 // regen is the one command to run after editing openapi.yml.
 //
 // Before it existed, a spec change meant remembering `go generate`, then
-// `go mod tidy`, then the openapi-typescript invocation with its pinned
-// version, then hand-editing the version in two more files - and
+// `go mod tidy`, then the client generator with its pinned version,
+// then hand-editing the version in two more files - and
 // `homelabctl check` existed partly to catch the steps people forgot.
 // Running them is cheaper than checking whether they were run.
 func regenCmd() *cobra.Command {
