@@ -143,6 +143,49 @@ func TestModulePath(t *testing.T) {
 // is what makes them editable - and also means a template fix cannot
 // reach a service that already exists. --force is how one is pulled in,
 // and it must touch only what it names.
+// --overwrite edits a service that already exists, so it must never
+// reach the remote setup that creates a GitHub repository.
+//
+// Without this it did: run in a service directory WITHOUT
+// --local-only, it created an empty repo named after the service,
+// cloned it into the tree it was supposed to be editing, and failed
+// on a manifest inside that clone.
+//
+// No --local-only here, which is the whole point - that flag already
+// skips the remote, so a test that sets it cannot catch this.
+func TestOverwriteNeverCreatesARemote(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "Dockerfile")
+	if err := os.WriteFile(target, []byte("# mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	o := initOpts{
+		name: "svc", runtimeID: "go-service", owner: "o", yes: true,
+		skipTidy:  true,
+		overwrite: map[string]bool{"Dockerfile": true},
+	}
+	// setupRemote shells out to gh. If --overwrite reaches it this
+	// either fails or creates a repository; either way the rewrite
+	// below does not happen.
+	if err := runInit(o); err != nil {
+		t.Fatalf("--overwrite failed, which is what reaching the remote looks like: %v", err)
+	}
+
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) == "# mine\n" {
+		t.Error("--overwrite Dockerfile did not rewrite it")
+	}
+	// A created repo is cloned into the working directory.
+	if entries, _ := os.ReadDir(filepath.Join(dir, "svc")); entries != nil {
+		t.Error("--overwrite cloned a repository into the tree it was editing")
+	}
+}
+
 func TestOverwriteRewritesOnlyTheNamedFiles(t *testing.T) {
 	dir := t.TempDir()
 	mine := filepath.Join(dir, "main.go")

@@ -173,8 +173,14 @@ func runInit(o initOpts) error {
 
 	// Remote first, so the local tree ends up inside a real clone with a
 	// remote already set, rather than files you then have to wire up.
+	//
+	// --overwrite never reaches it. That flag rewrites files in a
+	// service that already exists, so there is nothing to create; run
+	// from the wrong directory it made an empty GitHub repo named after
+	// the service and cloned it into the tree it was meant to be
+	// editing.
 	dir := "."
-	if !o.localOnly {
+	if !o.localOnly && len(o.overwrite) == 0 {
 		d, err := setupRemote(o)
 		if err != nil {
 			return fmt.Errorf("remote setup: %w", err)
@@ -215,8 +221,12 @@ func runInit(o initOpts) error {
 		return nil
 	}
 
+	// --overwrite rewrites files in the service this was run from, so
+	// the target is the working directory as-is. Deriving it the way a
+	// new service does puts it one services/<name> too deep and writes
+	// a second service inside the first.
 	target := dir
-	if o.parentRepo != "" {
+	if o.parentRepo != "" && len(o.overwrite) == 0 {
 		target = filepath.Join(dir, "services", o.name)
 	}
 	// setupLocal returns a tidy failure rather than aborting on it: the
@@ -306,6 +316,14 @@ func artifactParams(c *config.Config, owner, parentRepo string) runtime.Params {
 	}
 	if parentRepo != "" {
 		p.PathFilter = filepath.Join("services", c.Name)
+	} else if sub := serviceSubdir(); sub != "" {
+		// --overwrite runs inside an existing service rather than being
+		// told where to put a new one, so the layout is read from where
+		// it is standing. Without this the monorepo service rendered a
+		// Dockerfile with WORKDIR /repo/. - the repository root, where
+		// there is no package.json - and the build failed on a lockfile
+		// that was never missing.
+		p.PathFilter = sub
 	}
 	p.Module = modulePath(c, owner, parentRepo)
 	return p
@@ -1233,4 +1251,28 @@ func existingRuntime() (string, error) {
 	}
 
 	return "", nil
+}
+
+// serviceSubdir is the working directory's path within its repository,
+// when that is a services/<name> directory holding a config.yaml.
+//
+// Empty for a single-service repo, where the service IS the root and
+// there is no subdirectory to name.
+func serviceSubdir() string {
+	root := repoRoot()
+	if root == "" {
+		return ""
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	rel, err := filepath.Rel(root, wd)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	if _, err := os.Stat(filepath.Join(wd, configName)); err != nil {
+		return ""
+	}
+	return filepath.ToSlash(rel)
 }
