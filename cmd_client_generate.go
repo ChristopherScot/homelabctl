@@ -249,17 +249,35 @@ func generateGoClient(dir, name string, c clientSpec, specPath string) error {
 	return nil
 }
 
+// generateTSClient writes a named-operation client, the same shape a
+// scaffolded service gets, so a third-party client reads like the ones
+// this tool generates for our own services.
+//
+// The config is written next to the output, and hey-api reads it from
+// there - it clears its output directory on every run, so that
+// directory holds nothing else.
 func generateTSClient(dir, name string, c clientSpec, specPath string) error {
 	out := filepath.Join(dir, c.Out)
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return fmt.Errorf("creating %s: %w", c.Out, err)
 	}
-	dst := filepath.Join(out, "schema.d.ts")
-	argv := codegen.TypescriptCommand(specPath, dst)
-	if err := runIn("generating the TypeScript client for "+name, dir, argv...); err != nil {
+
+	cfgPath := filepath.Join(out, "openapi-ts.config.ts")
+	// The spec is a temporary file outside the output tree, so the
+	// config names it absolutely rather than relative to itself.
+	abs, err := filepath.Abs(specPath)
+	if err != nil {
 		return err
 	}
-	fmt.Printf("  ts: %s\n", filepath.Join(c.Out, "schema.d.ts"))
+	if err := os.WriteFile(cfgPath, []byte(codegen.HeyAPIConfig(abs)), 0o644); err != nil {
+		return err
+	}
+	defer os.Remove(cfgPath)
+
+	if err := runIn("generating the TypeScript client for "+name, out, codegen.HeyAPICommand()...); err != nil {
+		return err
+	}
+	fmt.Printf("  ts: %s\n", filepath.Join(c.Out, "generated"))
 	return nil
 }
 
