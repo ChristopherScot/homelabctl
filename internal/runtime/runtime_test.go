@@ -804,7 +804,7 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 	if !hasPkg {
 		t.Fatal("no clients/ts/package.json")
 	}
-	for _, want := range []string{`"main": "dist/index.js"`, `"types": "dist/index.d.ts"`, `"prepack"`} {
+	for _, want := range []string{`"main": "dist/index.js"`, `"types": "dist/index.d.ts"`, `"prepare"`} {
 		if !strings.Contains(pkg, want) {
 			t.Errorf("the published package does not declare %s; it would ship unbuilt TypeScript", want)
 		}
