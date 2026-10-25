@@ -286,12 +286,19 @@ func generateTSClient(dir, name, apiVersion string, c clientSpec, specPath strin
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(cfgPath, []byte(codegen.HeyAPIConfig(abs)), 0o644); err != nil {
+	// Absolute, for the same reason the config path is: npx moves the
+	// working directory to the nearest package.json, so './generated'
+	// would land there instead of in this client.
+	absOut, err := filepath.Abs(filepath.Join(out, "generated"))
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(cfgPath, []byte(codegen.HeyAPIConfig(abs, absOut)), 0o644); err != nil {
 		return err
 	}
 	defer os.Remove(cfgPath)
 
-	if err := runIn("generating the TypeScript client for "+name, out, codegen.HeyAPICommand()...); err != nil {
+	if err := runIn("generating the TypeScript client for "+name, out, codegen.HeyAPICommand(cfgPath)...); err != nil {
 		return err
 	}
 	// Mark the generator's output before the hand-written half goes
