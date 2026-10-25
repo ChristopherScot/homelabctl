@@ -17,7 +17,9 @@ func init() {
 			// TypeScript ^5 and breaks on 7; running it through npx
 			// keeps that constraint out of the service's own
 			// dependencies, which stay current.
-			codegen.TypescriptCommand("openapi.yml", "clients/ts/schema.d.ts"),
+			// Run from clients/ts: openapi-ts.config.ts lives there and
+			// resolves the spec relative to itself.
+			codegen.HeyAPICommandIn("clients/ts"),
 		},
 		// Without go.sum the service does not build at all.
 		lock: [][]string{{"go", "mod", "tidy"}},
@@ -52,9 +54,11 @@ func init() {
 			// a monorepo puts the service at services/<name>/. The client
 			// is published to npmjs instead, so nothing installs from git
 			// and the manifest can live where it belongs.
-			"clients_ts_package.json.tmpl": {dst: "clients/ts/package.json", specOnly: true, regen: true},
-			"clients_ts_index.js.tmpl":     {dst: "clients/ts/index.js", specOnly: true, regen: true},
-			"clients_ts_index.d.ts.tmpl":   {dst: "clients/ts/index.d.ts", specOnly: true, regen: true},
+			"clients_ts_package.json.tmpl":         {dst: "clients/ts/package.json", specOnly: true, regen: true},
+			"clients_ts_index.ts.tmpl":             {dst: "clients/ts/index.ts", specOnly: true, regen: true},
+			"clients_ts_resilience.js.tmpl":        {dst: "clients/ts/resilience.js", specOnly: true, regen: true},
+			"clients_ts_resilience.d.ts.tmpl":      {dst: "clients/ts/resilience.d.ts", specOnly: true, regen: true},
+			"clients_ts_openapi_ts_config.ts.tmpl": {dst: "clients/ts/openapi-ts.config.ts", specOnly: true, regen: true},
 
 			"gitignore.tmpl": {dst: ".gitignore"},
 			"Makefile.tmpl":  {dst: "Makefile"},

@@ -1,13 +1,20 @@
-// Typed client for the {{ .Name }} API, generated from the same
-// openapi.yml the Go server is generated from. Defaults match the Go
-// client in api/client.go: 5s timeout, one retry (five can mean five
-// times the traffic to something already struggling), and a breaker -
-// both clients failing the same way is the point.
+// Resilience for the {{ .Name }} client: timeout, retry, circuit
+// breaker and the identifying headers. Defaults match the Go client in
+// api/client.go: 5s timeout, one retry (five can mean five times the
+// traffic to something already struggling), and a breaker - both
+// clients failing the same way is the point.
 //
-//   import createClient from '@{{ .NPMScope }}/{{ .Name }}-client'
+//   import { createClient, listThings } from '@{{ .NPMScope }}/{{ .Name }}-client'
 //   const client = createClient({ baseUrl: 'https://{{ .Name }}' })
-//   const { data, error } = await client.GET('/')
-import createFetchClient from 'openapi-fetch'
+//   const { data, error } = await listThings({ client })
+//
+// EVERYTHING BELOW IS GENERATOR-AGNOSTIC. It wraps `fetch` and knows
+// nothing about how the operations were generated. Swapping the
+// generator means changing the import and the one adapter call at the
+// bottom of this file - the Go client keeps the same seam, where
+// HTTPClient satisfies the generator's transport interface and the
+// retry logic is plain net/http.
+import { createClient as createGeneratedClient, createConfig } from './generated/client/index.ts'
 
 // Read from package.json rather than hardcoded: the header cannot then
 // disagree with the version a consumer installed.
@@ -114,7 +121,7 @@ export class Breaker {
  * @param {object} [options.policy=singleRetry]
  * @param {Breaker} [options.breaker] omit to disable circuit breaking.
  */
-export default function createClient({
+export function createClient({
   baseUrl,
   // CALLER's own service name, sent as Client-Name.
   name,
@@ -155,5 +162,8 @@ export default function createClient({
     return res
   }
 
-  return createFetchClient({ baseUrl, fetch: resilientFetch })
+  // THE ADAPTER. The one line that knows which generator produced the
+  // operations: it hands them a configured transport. Everything the
+  // generator needs is a baseUrl and a fetch.
+  return createGeneratedClient(createConfig({ baseUrl, fetch: resilientFetch }))
 }

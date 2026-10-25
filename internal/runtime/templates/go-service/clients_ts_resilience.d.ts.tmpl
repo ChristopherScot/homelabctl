@@ -1,8 +1,4 @@
-import type { Client } from 'openapi-fetch'
-import type { paths } from './schema.js'
-
-// Re-exported so consumers can name the types the API is made of.
-export type { paths, components, operations } from './schema.js'
+import type { Client } from './generated/client/index.ts'
 
 /** The installed package version, which tracks the spec. */
 export declare const ClientVersion: string
@@ -34,6 +30,9 @@ export declare function retryAfterMs(res: Response | undefined, maxMs: number): 
 
 export interface ClientOptions {
   baseUrl: string
+  /** The CALLER's own service name, sent as Client-Name so a runaway
+   *  client can be attributed. */
+  name?: string
   /** Bounds a single attempt. Default 5000; a retry gets its own. */
   timeoutMs?: number
   /** Default singleRetry. */
@@ -44,6 +43,7 @@ export interface ClientOptions {
   maxRetryAfterMs?: number
 }
 
-/** Typed client; calling an endpoint the spec does not describe is a
- *  compile error. */
-export default function createClient(options: ClientOptions): Client<paths>
+/** A configured transport for the generated operations. Pass it as
+ *  `{ client }` to any of them; calling an endpoint the spec does not
+ *  describe is a compile error. */
+export declare function createClient(options: ClientOptions): Client

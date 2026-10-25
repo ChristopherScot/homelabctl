@@ -85,6 +85,11 @@ type Params struct {
 // with nothing comparing them.
 func (p Params) OgenCommand() string { return codegen.OgenCommand() }
 
+// HeyAPIVersion is the pinned @hey-api/openapi-ts the generated
+// client's package.json declares, from internal/codegen so it cannot
+// drift from the version the generate step actually runs.
+func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
+
 // BinaryName is what `go build` with no -o produces: the last element of
 // the module path, which is not always the service name. The repo
 // go-shlink-redirector holds the service shlink-redirector, so a

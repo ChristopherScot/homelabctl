@@ -761,16 +761,16 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 		t.Error("a package.json at the service root is the old git-install layout")
 	}
 
-	js, ok := files["clients/ts/index.js"]
+	js, ok := files["clients/ts/resilience.js"]
 	if !ok {
-		t.Fatal("no clients/ts/index.js")
+		t.Fatal("no clients/ts/resilience.js")
 	}
 	// The version is read from package.json, never copied here - the
 	// header cannot then disagree with the version a consumer installed.
 	if !strings.Contains(js, "pkg.version") {
 		t.Error("the TypeScript client hardcodes its version instead of reading package.json")
 	}
-	// Relative to index.js, which is the same directory. It used to be
+	// Relative to resilience.js, which is the same directory. It used to be
 	// '../../package.json' because the manifest was at the service root;
 	// with the manifest moved, that path points outside the published
 	// tarball and the client fails to load for every consumer.
@@ -787,8 +787,31 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 		}
 	}
 
-	if _, ok := files["clients/ts/index.d.ts"]; !ok {
-		t.Error("no clients/ts/index.d.ts; consumers get no types for the client itself")
+	if _, ok := files["clients/ts/resilience.d.ts"]; !ok {
+		t.Error("no clients/ts/resilience.d.ts; consumers get no types for the client itself")
+	}
+
+	// The package entry re-exports the generated operations beside the
+	// transport, so a consumer imports one thing. Without it they would
+	// have to know that operations live under generated/.
+	index, ok := files["clients/ts/index.ts"]
+	if !ok {
+		t.Fatal("no clients/ts/index.ts")
+	}
+	for _, want := range []string{"./generated/sdk.gen.ts", "./resilience.js"} {
+		if !strings.Contains(index, want) {
+			t.Errorf("the package entry does not re-export %s", want)
+		}
+	}
+
+	// hey-api CLEARS its output directory on every run, so it must not
+	// be the directory holding the hand-written files.
+	cfg, ok := files["clients/ts/openapi-ts.config.ts"]
+	if !ok {
+		t.Fatal("no clients/ts/openapi-ts.config.ts")
+	}
+	if !strings.Contains(cfg, "'./generated'") {
+		t.Error("the generator writes beside the hand-written client files; it clears that directory on every run")
 	}
 
 	// The types come from the spec, so CI has to catch a stale client
@@ -1316,7 +1339,7 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	// Generated: a fix to one of these templates has to reach services
 	// that already exist, or regen is only useful on the day a service
 	// is created.
-	for _, generated := range []string{"api/client.go", "clients/ts/index.js", "clients/ts/package.json"} {
+	for _, generated := range []string{"api/client.go", "clients/ts/resilience.js", "clients/ts/package.json"} {
 		if !set[generated] {
 			t.Errorf("regen does not rewrite %s; a template fix would never reach existing services", generated)
 		}
@@ -1744,7 +1767,7 @@ func TestStartupGuardMatchesBothEntrypoints(t *testing.T) {
 // npm rejects an uppercase scope, and GitHub owners are commonly mixed
 // case - ChristopherScot among them. NPMScope() exists for this and
 // clients/ts/package.json used it, so the PUBLISHED name was always
-// right; the install hint in clients/ts/index.js used .Owner instead
+// right; the install hint in clients/ts/resilience.js used .Owner instead
 // and told anyone reading it to install @ChristopherScot/<name>-client,
 // which npm refuses.
 //
@@ -1821,7 +1844,7 @@ func TestClientHeadersAgreeAcrossTemplates(t *testing.T) {
 
 	// The two the server reads must be set by both clients.
 	for _, h := range []string{"Client-Name", "Client-Version"} {
-		for _, path := range []string{"api/client.go", "clients/ts/index.js"} {
+		for _, path := range []string{"api/client.go", "clients/ts/resilience.js"} {
 			body, ok := bodies[path]
 			if !ok {
 				t.Fatalf("no %s in the artifacts", path)
