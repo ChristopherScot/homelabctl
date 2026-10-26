@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ChristopherScot/homelabctl/internal/apiclient"
 	"github.com/ChristopherScot/homelabctl/internal/config"
 	"github.com/ChristopherScot/homelabctl/internal/runtime"
+	"github.com/ChristopherScot/oapiclient-gen/apiclient"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
