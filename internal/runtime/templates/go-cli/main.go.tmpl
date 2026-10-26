@@ -16,6 +16,8 @@ import (
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/module"
+	"golang.org/x/mod/semver"
 )
 
 // Version is set at build time via ldflags by the release workflow.
@@ -40,16 +42,25 @@ func version() string {
 // lookup so it can be tested - a test binary has no module version of
 // its own to stand in for one.
 //
-// "(devel)" is what a local `go build` reports, which is not a version
-// anything can compare or update against.
-func pickVersion(ldflags, module string) string {
+// Only a released version counts. A build from a working tree reports
+// "(devel)", a pseudo-version derived from the commit, or a tag with
+// "+dirty" appended; none of them names a release that exists, and
+// updating from one would overwrite someone's own build with a release
+// they did not ask for.
+//
+// semver.IsValid rejects "(devel)" and "". Canonical differs from the
+// original exactly when there is build metadata, which is how "+dirty"
+// is caught - it is a suffix on an otherwise real tag.
+func pickVersion(ldflags, modver string) string {
 	switch {
 	case ldflags != "":
 		return ldflags
-	case module != "" && module != "(devel)":
-		return module
-	default:
+	case !semver.IsValid(modver),
+		semver.Canonical(modver) != modver,
+		module.IsPseudoVersion(modver):
 		return "dev"
+	default:
+		return modver
 	}
 }
 
