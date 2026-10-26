@@ -52,19 +52,20 @@ func updateCmd() *cobra.Command {
 }
 
 func runUpdate(checkOnly bool) error {
-	fmt.Printf("current version: %s\n", Version)
+	v := version()
+	fmt.Printf("current version: %s\n", v)
 
 	// A dev build has no meaningful version, and overwriting someone's
 	// working-tree build with a release is never what they want. Checked
 	// before the network call so the message is the real reason rather
 	// than whatever the API happens to say.
-	// semver wants the leading v, so normalise toward it rather than
-	// stripping it off and putting it back.
-	current := ensureV(Version)
-	if Version == "dev" {
+	if v == "dev" {
 		fmt.Println("running a dev build; not updating")
 		return nil
 	}
+	// semver wants the leading v, so normalise toward it rather than
+	// stripping it off and putting it back.
+	current := ensureV(v)
 
 	rel, err := latestRelease()
 	if err != nil {
