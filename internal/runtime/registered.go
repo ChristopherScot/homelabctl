@@ -1,6 +1,6 @@
 package runtime
 
-import "github.com/ChristopherScot/homelabctl/internal/codegen"
+import "github.com/ChristopherScot/oapiclient-gen/codegen"
 
 // The runtimes that ship with homelabctl. Adding a language means adding a
 // directory under templates/ and an entry here - no other code changes.

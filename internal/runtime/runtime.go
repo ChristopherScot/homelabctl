@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ChristopherScot/homelabctl/internal/codegen"
+	"github.com/ChristopherScot/oapiclient-gen/codegen"
 )
 
 // InitialSpecVersion is where a new service's API starts. It reaches both

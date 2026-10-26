@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"github.com/ChristopherScot/homelabctl/internal/apiclient"
+	"github.com/ChristopherScot/oapiclient-gen/apiclient"
 	"path"
 	"sort"
 	"strings"
