@@ -2243,6 +2243,39 @@ func TestNodeServiceBuildsASiblingClient(t *testing.T) {
 	}
 }
 
+// The Dockerfile is not the only thing that compiles against the
+// client: `make test` runs tsc, and without dist/ it reports the
+// package as missing entirely rather than unbuilt.
+func TestNodeServiceMakefileBuildsASiblingClient(t *testing.T) {
+	r, err := Get("node-service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var makefile string
+	for _, f := range r.Artifacts(Params{Name: "web", Module: "github.com/o/r/services/web", Spec: true}).Files {
+		if f.Path == "Makefile" {
+			makefile = f.Body
+		}
+	}
+	if makefile == "" {
+		t.Fatal("node-service has no Makefile")
+	}
+
+	build := "for c in ./clients/ts ../*/clients/ts"
+	if !strings.Contains(makefile, build) {
+		t.Error("the Makefile does not build a sibling generated client")
+	}
+
+	// A prerequisite of deps, not of node_modules. CI runs `npm ci`
+	// itself before `make test`, so the node_modules file target is
+	// already satisfied and anything hanging off it never runs - which
+	// is how this shipped broken once.
+	if !strings.Contains(makefile, "deps: client node_modules") {
+		t.Error("client is not a prerequisite of deps; a pre-installed " +
+			"node_modules will skip it, which is what CI does")
+	}
+}
+
 // clientFiles hardcodes HasSecurity: false, which is only correct
 // while the scaffolded spec declares no securitySchemes. ogen keys
 // its constructor signature off exactly that, so the day this
