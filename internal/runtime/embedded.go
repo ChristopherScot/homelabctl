@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"github.com/ChristopherScot/oapiclient-gen/apiclient"
+	"github.com/ChristopherScot/oapi-clientgen/apiclient"
 	"path"
 	"sort"
 	"strings"
