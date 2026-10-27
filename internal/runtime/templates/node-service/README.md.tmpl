@@ -31,6 +31,39 @@ make test             # typecheck, then the tests. What CI runs.
 Add a service's own setup — a database, a seed step, extra env — to
 `Makefile.local`. It is not generated, so it survives a regenerate.
 
+## Calling this service
+
+```ts
+import { createClient } from './clients/ts'
+
+const client = createClient({
+  baseUrl: 'https://{{ .Name }}',
+  name: 'your-service-name',
+})
+```
+
+`name` is YOUR service's name, not the one being called: it goes out as
+`Client-Name`, so whoever operates the service you call can tell who is
+calling. It is required for that reason.
+
+That gives a 5s timeout per attempt, one retry, `Retry-After` obeyed up
+to 30s, and no circuit breaker. Pass `policy: exponentialRetry` or
+`breaker: new Breaker(5, 30_000)` when a call wants something else.
+
+### Tracing
+
+`createResilientFetch` returns a `fetch` and hey-api takes one, so a
+tracing wrapper composes around it:
+
+```ts
+const resilient = createResilientFetch({ name: 'your-service-name' })
+createClient({ baseUrl, name: 'your-service-name',
+               fetch: (input, init) => withSpan(() => resilient(input, init)) })
+```
+
+Wrapping outside gives one span for the logical call; wrapping inside
+gives one per attempt.
+
 ## Deploy
 
 CI builds and pushes an image on every push to `main`;
