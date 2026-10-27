@@ -791,6 +791,9 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 	// prose and in a field type, so renaming the class alone would
 	// leave the substring behind and pass. Each of these is a name a
 	// consumer imports, so a rename is a breaking change and fails.
+	//
+	// They come from oapi-clientgen's template, so a failure here is a
+	// contract change to read, not a list to update.
 	for _, want := range []string{
 		"export const ClientVersionHeader", "export const ClientNameHeader",
 		"export const singleRetry", "export const exponentialRetry",
