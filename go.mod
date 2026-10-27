@@ -3,7 +3,7 @@ module github.com/ChristopherScot/homelabctl
 go 1.27
 
 require (
-	github.com/ChristopherScot/oapi-clientgen v0.0.5
+	github.com/ChristopherScot/oapi-clientgen v0.0.6
 	github.com/hashicorp/vault-client-go v0.4.3
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/cobra v1.10.2

@@ -179,10 +179,16 @@ npm install @owner/myservice-client
 ```
 
 ```ts
-import createClient from '@owner/myservice-client'
+import { createClient } from '@owner/myservice-client'
 
-const client = createClient({ baseUrl: 'https://myservice.example.com' })
+const client = createClient({
+  baseUrl: 'https://myservice.example.com',
+  name: 'your-service-name',
+})
 ```
+
+`name` is the CALLER's own name and is required: it goes out as
+`Client-Name`, so this service can tell who is calling it.
 
 The first TypeScript release is published by hand — `homelabctl init`
 prints the two commands. After that CI publishes each new version

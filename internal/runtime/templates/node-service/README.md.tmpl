@@ -50,6 +50,21 @@ That gives a 5s timeout per attempt, one retry, `Retry-After` obeyed up
 to 30s, and no circuit breaker. Pass `policy: exponentialRetry` or
 `breaker: new Breaker(5, 30_000)` when a call wants something else.
 
+### Testing a service that calls this one
+
+`fetch` replaces the network, under the retries - so a test can answer
+from memory and still exercise the timeout, the retries and the
+breaker:
+
+```ts
+createClient({ baseUrl, name: 'your-service-name',
+               fetch: async () => new Response('{}', { status: 200 }) })
+```
+
+Build the client where the service starts and pass it to whatever
+needs it, rather than exporting one: a test can then hand over its own
+without patching globals.
+
 ### Tracing
 
 `createResilientFetch` returns a `fetch` and hey-api takes one, so a
@@ -63,6 +78,13 @@ createClient({ baseUrl, name: 'your-service-name',
 
 Wrapping outside gives one span for the logical call; wrapping inside
 gives one per attempt.
+
+The `fetch` here is hey-api's, which sits over the retries, while the
+`fetch` in `createClient`'s own options sits under them. Same word,
+either side of the retry loop, depending on which object you put it
+in. Passing hey-api's replaces the resilient fetch rather than
+composing with it, which is why the example calls it rather than
+dropping it.
 
 ## Deploy
 
