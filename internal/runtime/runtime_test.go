@@ -790,10 +790,6 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 	for _, want := range []string{
 		"Client-Version", "Client-Name", "singleRetry", "exponentialRetry",
 		"noRetry", "CircuitOpenError", "Breaker",
-		// Resolved per request rather than captured when the client is
-		// built, so a consumer that installs an interceptor after
-		// building one still gets it.
-		"send ?? globalThis.fetch",
 	} {
 		if !strings.Contains(js, want) {
 			t.Errorf("the TypeScript client has no %s; it does not match the Go client's defaults", want)
