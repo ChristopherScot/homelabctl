@@ -195,7 +195,9 @@ anyone running it locally.
 
 The Dockerfile already supports it: the build context is the REPOSITORY
 root, so the sibling directory is visible, and vite inlines the client
-into the bundle, so no symlink reaches the running image.
+into the bundle, so no symlink reaches the running image. The client is
+built by `scripts/build-clients.sh`, which the Dockerfile and
+`make deps` both run.
 
 Two more things worth knowing. The consumer's workflow needs the API
 service in its `paths:` filter, or a spec change skips the job that
