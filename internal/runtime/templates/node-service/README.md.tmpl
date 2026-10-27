@@ -82,7 +82,9 @@ gives one per attempt.
 The `fetch` here is hey-api's, which sits over the retries, while the
 `fetch` in `createClient`'s own options sits under them. Same word,
 either side of the retry loop, depending on which object you put it
-in.
+in. Passing hey-api's replaces the resilient fetch rather than
+composing with it, which is why the example calls it rather than
+dropping it.
 
 ## Deploy
 
