@@ -787,13 +787,18 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 		t.Error("a transport failure is not re-thrown; it reaches callers looking like an answer")
 	}
 
+	// The export sites, not the bare names: "Breaker" also appears in
+	// prose and in a field type, so renaming the class alone would
+	// leave the substring behind and pass. Each of these is a name a
+	// consumer imports, so a rename is a breaking change and fails.
+	//
+	// They come from oapi-clientgen's template, so a failure here is a
+	// contract change to read, not a list to update.
 	for _, want := range []string{
-		"Client-Version", "Client-Name", "singleRetry", "exponentialRetry",
-		"noRetry", "CircuitOpenError", "Breaker",
-		// Resolved per request rather than captured when the client is
-		// built, so a consumer that installs an interceptor after
-		// building one still gets it.
-		"send ?? globalThis.fetch",
+		"export const ClientVersionHeader", "export const ClientNameHeader",
+		"export const singleRetry", "export const exponentialRetry",
+		"export const noRetry", "export class CircuitOpenError",
+		"export class Breaker",
 	} {
 		if !strings.Contains(js, want) {
 			t.Errorf("the TypeScript client has no %s; it does not match the Go client's defaults", want)
