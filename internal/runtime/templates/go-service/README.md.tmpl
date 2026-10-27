@@ -133,12 +133,20 @@ mean five times the traffic to a dependency that is already struggling.
 c, err := api.New(url, "your-service-name",
     api.WithPolicy(api.ExponentialRetry{}),
     api.WithBreaker(5, 30*time.Second),
-    api.WithTransport(otelhttp.NewTransport(http.DefaultTransport)),
 )
 ```
 
-`WithTransport` is where tracing goes. Retries live above the transport,
-so a retried request traces as one span per attempt.
+### Tracing
+
+`WithTransport` takes any `http.RoundTripper`, which is the seam
+OpenTelemetry's instrumentation plugs into:
+
+```go
+api.WithTransport(otelhttp.NewTransport(http.DefaultTransport))
+```
+
+Retries live above the transport, so a retried request produces one
+span per attempt rather than one span with a retry count.
 
 ## Deploy
 
