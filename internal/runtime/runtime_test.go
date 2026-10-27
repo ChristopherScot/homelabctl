@@ -787,6 +787,10 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 		t.Error("a transport failure is not re-thrown; it reaches callers looking like an answer")
 	}
 
+	// Exported names only. Each of these is something a consumer
+	// writes or catches, so renaming one breaks them and should fail
+	// here. An expression from inside a function body does not
+	// belong: it fails when the spelling changes and nothing else.
 	for _, want := range []string{
 		"Client-Version", "Client-Name", "singleRetry", "exponentialRetry",
 		"noRetry", "CircuitOpenError", "Breaker",
