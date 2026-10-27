@@ -15,17 +15,11 @@ COPY . .
 
 WORKDIR /repo{{ if ne .ServiceDir "." }}/{{ .ServiceDir }}{{ end }}
 
-# A generated client ships TypeScript sources and compiles to dist/, so
-# it is built before this service installs it: npm resolves the `file:`
-# main into dist/ and finds nothing otherwise.
-#
-# Both layouts: clients/ts beside the service in a single-service repo,
-# and a sibling service's in a monorepo. Neither glob matching is a
-# service that consumes no client.
-RUN for c in ./clients/ts ../*/clients/ts; do \
-      [ -f "$c/package.json" ] || continue; \
-      ( cd "$c" && npm ci --no-audit --no-fund && npm run build ); \
-    done
+# Before `npm ci`, as `make deps` orders it: the install links a
+# `file:` client into node_modules, and the client's dist/ has to exist
+# before anything resolves its main through that link. The script says
+# how.
+RUN sh scripts/build-clients.sh
 
 # Dev deps included: the bundler and TypeScript are devDependencies and
 # neither ends up in the image.

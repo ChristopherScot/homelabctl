@@ -1144,10 +1144,12 @@ func printNext(o initOpts, c *config.Config, dir string, arts runtime.Artifacts)
 	}
 }
 
-// writeFile creates a scaffolded file. Everything scaffolded is source,
-// config or CI YAML, so they are all 0644 - a CLI's binary is produced by
-// `go build`, not written here, and its self-update opens the replacement
-// 0755 itself.
+// writeFile creates a scaffolded file. Everything is 0644, shell scripts
+// included: whatever runs a scaffolded script - node-service's
+// Dockerfile and Makefile run scripts/build-clients.sh - invokes it
+// through `sh` rather than relying on an exec bit. A CLI's binary is
+// produced by `go build`, not written here, and its self-update opens
+// the replacement 0755 itself.
 func writeFile(path, body string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
