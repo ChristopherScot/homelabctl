@@ -1,5 +1,6 @@
-v1.21.0
+v1.21.1
 
+v1.21.1 the client generator is now oapi-clientgen, a dependency
 v1.21.0 generated clients carry their resilience layer, both languages
 v1.20.3 --overwrite edits a service; it never creates a repo
 v1.20.2 a consumer builds the generated client it depends on
