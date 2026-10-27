@@ -787,13 +787,15 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 		t.Error("a transport failure is not re-thrown; it reaches callers looking like an answer")
 	}
 
-	// Exported names only. Each of these is something a consumer
-	// writes or catches, so renaming one breaks them and should fail
-	// here. An expression from inside a function body does not
-	// belong: it fails when the spelling changes and nothing else.
+	// The export sites, not the bare names: "Breaker" also appears in
+	// prose and in a field type, so renaming the class alone would
+	// leave the substring behind and pass. Each of these is a name a
+	// consumer imports, so a rename is a breaking change and fails.
 	for _, want := range []string{
-		"Client-Version", "Client-Name", "singleRetry", "exponentialRetry",
-		"noRetry", "CircuitOpenError", "Breaker",
+		"export const ClientVersionHeader", "export const ClientNameHeader",
+		"export const singleRetry", "export const exponentialRetry",
+		"export const noRetry", "export class CircuitOpenError",
+		"export class Breaker",
 	} {
 		if !strings.Contains(js, want) {
 			t.Errorf("the TypeScript client has no %s; it does not match the Go client's defaults", want)
