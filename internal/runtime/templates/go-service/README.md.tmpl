@@ -136,6 +136,20 @@ c, err := api.New(url, "your-service-name",
 )
 ```
 
+### Testing a service that calls this one
+
+`WithTransport` replaces the network, under the retries, so a test can
+answer from memory and still exercise the timeout, the retries and the
+breaker:
+
+```go
+api.New(url, "your-service-name", api.WithTransport(canned))
+```
+
+Build the client where the service starts and pass it to whatever
+needs it, rather than reaching for a package-level one: a test can
+then hand over its own.
+
 ### Tracing
 
 `WithTransport` takes any `http.RoundTripper`, which is the seam
