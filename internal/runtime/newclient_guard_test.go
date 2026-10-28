@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,15 +47,15 @@ func main() {
 	d, _ := otherapi.NewClient(url)
 }
 `)
-			if out, err := makeTest(t, dir); err != nil {
-				t.Fatalf("make test failed with no bare constructor in sight:\n%s", out)
+			if out, err := makeTest(t, dir, nil); err != nil {
+				t.Fatalf("make test failed with no api.NewClient call in sight:\n%s", out)
 			}
 
 			writeFile(t, filepath.Join(dir, "main.go"), `package main
 
 func main() { c, _ := api.NewClient(url) }
 `)
-			out, err := makeTest(t, dir)
+			out, err := makeTest(t, dir, nil)
 			if err == nil {
 				t.Fatalf("make test passed a call to api.NewClient:\n%s", out)
 			}
@@ -66,6 +67,17 @@ func main() { c, _ := api.NewClient(url) }
 			if !strings.Contains(out, "Call api.New(") {
 				t.Errorf("the failure does not say to call api.New:\n%s", out)
 			}
+
+			// A grep that could not run found nothing, which is not
+			// the same as finding no call. That has to fail too, and
+			// say so, or a grep without --exclude-dir passes everything.
+			out, err = makeTest(t, dir, map[string]string{"grep": "exit 2"})
+			if err == nil {
+				t.Fatalf("make test passed although grep could not run:\n%s", out)
+			}
+			if !strings.Contains(out, "grep could not run") {
+				t.Errorf("the failure does not say grep could not run:\n%s", out)
+			}
 		})
 	}
 	if checked == 0 {
@@ -74,29 +86,34 @@ func main() { c, _ := api.NewClient(url) }
 }
 
 // renderedMakefile is the Makefile a runtime scaffolds.
-func renderedMakefile(t *testing.T, runtime string) string {
+func renderedMakefile(t *testing.T, name string) string {
 	t.Helper()
-	r, err := Get(runtime)
+	r, err := Get(name)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Get(%q) = %v", name, err)
 	}
 	for _, f := range r.Artifacts(testParams()).Files {
 		if f.Path == "Makefile" {
 			return f.Body
 		}
 	}
-	t.Fatalf("%s has no Makefile", runtime)
+	t.Fatalf("%s has no Makefile", name)
 	return ""
 }
 
-// makeTest runs `make test` in dir with a `go` on PATH that always
-// succeeds, so the Makefile's own checks are the only thing that can
-// fail.
-func makeTest(t *testing.T, dir string) (string, error) {
+// makeTest runs `make test` in dir. `go` is stubbed to succeed, so the
+// Makefile's own checks are the only thing that can fail; stubs adds
+// or replaces commands, each a shell body, for the cases where one of
+// those checks' tools misbehaves.
+func makeTest(t *testing.T, dir string, stubs map[string]string) (string, error) {
 	t.Helper()
 	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
+	all := map[string]string{"go": "exit 0"}
+	maps.Copy(all, stubs)
+	for name, body := range all {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	cmd := exec.Command("make", "test")
 	cmd.Dir = dir
@@ -106,6 +123,8 @@ func makeTest(t *testing.T, dir string) (string, error) {
 	return string(out), err
 }
 
+// writeFile writes body to path, creating any missing parent
+// directories.
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -137,8 +137,9 @@ c, err := api.New(url, "your-service-name",
 ```
 
 Not `api.NewClient`: that is ogen's own constructor and installs none of
-the above. A scaffolded `make test` fails on any mention of
-`api.NewClient(` in a `.go` file outside a directory named `api`.
+the above. If your service was scaffolded by homelabctl, its `make test`
+fails on any mention of `api.NewClient(` in a `.go` file outside a
+directory named `api`.
 
 ### Testing a service that calls this one
 
