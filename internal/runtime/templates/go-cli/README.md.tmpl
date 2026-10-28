@@ -23,7 +23,7 @@ Releases are built by CI and published to GitHub Releases;
 ## Testing
 
 ```sh
-make test             # go vet and go test -race. What CI runs.
+make test             # api.NewClient guard, go vet, go test -race. What CI runs.
 ```
 
 Add a service's own setup to `Makefile.local`. It is not generated, so

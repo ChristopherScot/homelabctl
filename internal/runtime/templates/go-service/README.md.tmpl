@@ -61,7 +61,7 @@ homelabctl regen                 # after editing openapi.yml
 ## Testing
 
 ```sh
-make test                        # go vet and go test -race. What CI runs.
+make test                        # api.NewClient guard, go vet, go test -race. What CI runs.
 ```
 
 Add a service's own setup — a database, a seed step, extra env — to
@@ -135,6 +135,11 @@ c, err := api.New(url, "your-service-name",
     api.WithBreaker(5, 30*time.Second),
 )
 ```
+
+Not `api.NewClient`: that is ogen's own constructor and installs none of
+the above. If your service was scaffolded by homelabctl, its `make test`
+fails on any mention of `api.NewClient(` in a `.go` file outside a
+directory named `api`.
 
 ### Testing a service that calls this one
 
