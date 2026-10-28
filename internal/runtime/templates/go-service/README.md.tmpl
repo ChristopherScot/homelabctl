@@ -125,6 +125,10 @@ The second argument is YOUR service's name, not the one being called: it
 goes out as `Client-Name`, so whoever operates this service can tell who
 is calling.
 
+Not `api.NewClient`: that is ogen's own constructor and installs none of
+what follows. A scaffolded `make test` fails on any call to it outside
+the generated `api/`.
+
 With no options that gives a 5s timeout, one retry, `Retry-After` obeyed
 up to 30s, and no breaker. One retry rather than five, because five can
 mean five times the traffic to a dependency that is already struggling.

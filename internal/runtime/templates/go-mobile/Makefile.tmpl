@@ -97,8 +97,15 @@ apk-tools:
 	[ $$fail = 0 ] || exit 1
 
 # -race matches CI.
+#
+# The grep: api.NewClient is ogen's own constructor and installs no
+# timeout and no retries. api.New is the one to call, and three of
+# three consumers reached for the wrong one before anything checked.
+# The generated api/ is skipped because it is where NewClient lives.
 .PHONY: test
 test:
+	@! grep -rn --include='*.go' --exclude-dir=api 'api\.NewClient(' . || { \
+		echo "api.NewClient is ogen's constructor: no timeout, no retries. Call api.New."; exit 1; }
 	go vet ./...
 	go test -race ./...
 
