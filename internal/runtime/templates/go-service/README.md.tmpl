@@ -61,7 +61,7 @@ homelabctl regen                 # after editing openapi.yml
 ## Testing
 
 ```sh
-make test                        # go vet and go test -race. What CI runs.
+make test                        # api.NewClient guard, go vet, go test -race. What CI runs.
 ```
 
 Add a service's own setup — a database, a seed step, extra env — to

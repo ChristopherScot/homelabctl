@@ -97,7 +97,7 @@ func renderedMakefile(t *testing.T, name string) string {
 			return f.Body
 		}
 	}
-	t.Fatalf("%s has no Makefile", name)
+	t.Fatalf("%q has no Makefile", name)
 	return ""
 }
 
