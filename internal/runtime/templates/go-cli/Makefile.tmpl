@@ -27,13 +27,19 @@ build:
 # -race matches CI.
 #
 # The grep: api.NewClient is ogen's own constructor and installs no
-# timeout and no retries. api.New is the one to call, and three of
-# three consumers reached for the wrong one before anything checked.
-# The generated api/ is skipped because it is where NewClient lives.
+# timeout and no retries; api.New is the one to call. It catches the
+# literal api.NewClient( in any .go file, comments included, and skips
+# every directory named api because that is where NewClient is
+# defined. An aliased import slips past. Only "no match" passes: a
+# grep that failed to run is not a check that found nothing.
 .PHONY: test
 test:
-	@! grep -rn --include='*.go' --exclude-dir=api 'api\.NewClient(' . || { \
-		echo "api.NewClient is ogen's constructor: no timeout, no retries. Call api.New."; exit 1; }
+	@grep -rnE --include='*.go' --exclude-dir=api '(^|[^[:alnum:]_])api\.NewClient\(' . ; \
+	case $$? in \
+		1) ;; \
+		0) echo "api.NewClient is ogen's constructor: no timeout, no retries. Call api.New(url, \"<your service's name>\") instead."; exit 1 ;; \
+		*) exit 1 ;; \
+	esac
 	go vet ./...
 	go test -race ./...
 
