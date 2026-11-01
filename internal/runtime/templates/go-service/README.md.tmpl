@@ -140,13 +140,12 @@ c, err := api.New(url, "your-service-name",
 window fail, once there have been twenty of them, and lets one through
 every thirty seconds to see whether the dependency is back. A rate
 rather than a run of failures, so a dependency failing two requests in
-three trips it — under a consecutive count the one success in three
-would clear the run forever. Change a figure with `WithBreakerPolicy`:
+three trips it. Change a figure with `WithBreakerPolicy`:
 
 ```go
 p := api.DefaultBreakerPolicy()
 p.FailPercent = 80
-c, err := api.New(url, "your-service-name", api.WithBreakerPolicy(p))
+api.WithBreakerPolicy(p) // in place of api.WithBreaker()
 ```
 
 ### Testing a service that calls this one

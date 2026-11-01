@@ -55,7 +55,7 @@ ten-second window fail, once there have been twenty of them, and lets
 one through every thirty seconds to see whether the dependency is back.
 A rate rather than a run of failures, so a dependency failing two
 requests in three trips it. Change a figure by passing the ones you
-want: `new Breaker({ failPercent: 80 })`.
+want; the rest keep their defaults: `new Breaker({ failPercent: 80 })`.
 
 ### Testing a service that calls this one
 
