@@ -145,7 +145,10 @@ every three trips it. Change a figure with `WithBreakerPolicy`:
 ```go
 p := api.DefaultBreakerPolicy()
 p.FailPercent = 80
-c, err := api.New(url, "your-service-name", api.WithBreakerPolicy(p))
+c, err := api.New(url, "your-service-name",
+    api.WithPolicy(api.ExponentialRetry{}),
+    api.WithBreakerPolicy(p), // in place of WithBreaker()
+)
 ```
 
 ### Testing a service that calls this one
@@ -155,7 +158,7 @@ answer from memory and still exercise the timeout, the retries and the
 breaker:
 
 ```go
-api.New(url, "your-service-name", api.WithTransport(canned))
+c, err := api.New(url, "your-service-name", api.WithTransport(canned))
 ```
 
 Build the client where the service starts and pass it to whatever
