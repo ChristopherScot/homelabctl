@@ -239,3 +239,33 @@ func TestOwnerFromRemoteKeepsGitHubCasing(t *testing.T) {
 		t.Errorf("ssh remote: ownerFromRemote = %q, want ChristopherScot", got)
 	}
 }
+
+// `regen --check` reports a file this tool owns that differs from its
+// template.
+//
+// It used to answer from syncVersions alone, which compares two version
+// strings, and so called a service up to date while generate_clients.go
+// - the file that names the generator the service runs - had drifted.
+// The flag says "report what is stale", and CI's own staleness gate is
+// a separate `git diff` precisely because this could not be trusted.
+func TestRegenCheckSeesATemplateOwnedFileDrift(t *testing.T) {
+	dir := regenFixture(t, "0.1.0", "0.1.0", "0.1.0")
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("go.mod", "module github.com/acme/widget\n\ngo 1.22\n")
+	write("config.yaml", "name: widget\nteam: platform\nruntime: go-service\nport: 3000\nspec: true\n")
+	// Drifted: whatever the template says, it does not say this.
+	write("generate_clients.go", "package main\n\n// not what the template renders\n")
+
+	err := runRegen(filepath.Join(dir, "config.yaml"), true)
+	if err == nil {
+		t.Fatal("regen --check reported no drift, so a stale generate_clients.go passes it")
+	}
+	if !strings.Contains(err.Error(), "out of date") {
+		t.Errorf("error = %v, want it to name files out of date", err)
+	}
+}

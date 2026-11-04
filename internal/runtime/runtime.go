@@ -96,8 +96,6 @@ func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 // oapi-clientgen and cannot name its own version.
 const ClientgenVersion = "v0.0.8"
 
-// ClientgenCommand is the pinned invocation the //go:generate
-// directive runs.
 func (p Params) ClientgenCommand() string {
 	return "go run github.com/ChristopherScot/oapi-clientgen@" + ClientgenVersion
 }

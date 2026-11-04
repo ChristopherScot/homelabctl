@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -946,6 +947,13 @@ func TestGoServiceGeneratesThroughOapiClientgen(t *testing.T) {
 	if !strings.Contains(gen, "oapi-clientgen@"+ClientgenVersion+" generate self") {
 		t.Errorf("generate_clients.go does not generate through oapi-clientgen %s", ClientgenVersion)
 	}
+	// Spelled out rather than built from ClientgenCommand, which would
+	// agree with itself however that changed. `go run` is the whole
+	// no-install property: `go install` renders a directive that reads
+	// fine and needs a binary on PATH that nothing puts there.
+	if !strings.Contains(gen, "//go:generate go run github.com/") {
+		t.Error("generate_clients.go does not run the generator with `go run`, so a checkout needs it installed")
+	}
 	if strings.Contains(gen, "go run github.com/ogen-go/ogen") {
 		t.Error("generate_clients.go runs ogen directly, which takes every default and instruments with otel")
 	}
@@ -1403,6 +1411,38 @@ func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
 	for _, floating := range []string{"latest", "main", "master", "HEAD"} {
 		if strings.Contains(ClientgenVersion, floating) {
 			t.Errorf("ClientgenVersion is %q: a scaffolded service would generate from a moving target", ClientgenVersion)
+		}
+	}
+}
+
+// The pinned generator can run the directive the template emits.
+//
+// TestTheScaffoldedGeneratorIsPinned holds that the version is a tag
+// rather than a moving target; this holds that it is the RIGHT tag.
+// Setting it to a release without `generate self` - v0.0.6, say -
+// leaves every scaffolded service with a directive that fails on the
+// subcommand, which is the bug this pin was introduced to fix, and
+// nothing else here notices.
+//
+// Asks the generator for the flags the template passes rather than
+// running a generation: that is the part a wrong version gets wrong,
+// and it needs no spec and writes nothing.
+func TestThePinnedGeneratorAcceptsTheDirective(t *testing.T) {
+	if testing.Short() {
+		t.Skip("downloads the pinned generator")
+	}
+	argv := append(strings.Fields(testParams().ClientgenCommand()), "generate", "self", "--help")
+	out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s: %v\n%s", strings.Join(argv, " "), err, out)
+	}
+	// Cobra treats an unknown subcommand as an argument, so `generate
+	// self` on a version without it prints `generate`'s own help and
+	// exits 0. The flags are what tell the two apart.
+	for _, flag := range []string{"--ts-out", "--npm-package"} {
+		if !strings.Contains(string(out), flag) {
+			t.Errorf("oapi-clientgen %s has no %s: the scaffolded directive would fail",
+				ClientgenVersion, flag)
 		}
 	}
 }

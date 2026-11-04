@@ -39,9 +39,9 @@ type tmpl struct {
 	// destroys the API - regen did exactly that once, replacing a
 	// five-endpoint spec with the two-endpoint scaffold.
 	//
-	// Only generated OUTPUT belongs here: the clients, which exist to be
-	// overwritten and carry a "do not edit" header saying so, and
-	// generate.go, which names the command that produces them.
+	// Only generated OUTPUT belongs here: the clients and
+	// generate_clients.go, which exist to be overwritten and carry a
+	// "do not edit" header saying so.
 	regen bool
 
 	// plain replaces this template when the service has no spec. The
