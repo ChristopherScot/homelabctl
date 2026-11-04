@@ -577,12 +577,16 @@ func TestGoServiceIsSpecFirst(t *testing.T) {
 	if _, ok := files["openapi.yml"]; !ok {
 		t.Error("no openapi.yml: the service has no API contract to generate from")
 	}
-	gen, ok := files["generate.go"]
+	gen, ok := files["generate_clients.go"]
 	if !ok {
-		t.Fatal("no generate.go: nothing regenerates the API")
+		t.Fatal("no generate_clients.go: nothing regenerates the API")
 	}
-	if !strings.Contains(gen, "go:generate") || !strings.Contains(gen, "ogen") {
-		t.Errorf("generate.go does not invoke ogen:\n%s", gen)
+	// The directive, not a word that happens to appear in the file.
+	// Matching "ogen" passed on the prose around it while the command
+	// it was meant to find - oapi-clientgen - does not contain that
+	// substring at all.
+	if !strings.Contains(gen, "//go:generate "+testParams().ClientgenCommand()+" generate self") {
+		t.Errorf("generate_clients.go does not invoke the generator:\n%s", gen)
 	}
 
 	// init runs Generate before Lock, and must: api/ does not exist until
@@ -935,15 +939,15 @@ func TestGoServiceGeneratesThroughOapiClientgen(t *testing.T) {
 		files[f.Path] = f.Body
 	}
 
-	gen, ok := files["generate.go"]
+	gen, ok := files["generate_clients.go"]
 	if !ok {
-		t.Fatal("no generate.go")
+		t.Fatal("no generate_clients.go")
 	}
-	if !strings.Contains(gen, "oapi-clientgen generate self") {
-		t.Error("generate.go does not generate through oapi-clientgen")
+	if !strings.Contains(gen, "oapi-clientgen@"+ClientgenVersion+" generate self") {
+		t.Errorf("generate_clients.go does not generate through oapi-clientgen %s", ClientgenVersion)
 	}
 	if strings.Contains(gen, "go run github.com/ogen-go/ogen") {
-		t.Error("generate.go runs ogen directly, which takes every default and instruments with otel")
+		t.Error("generate_clients.go runs ogen directly, which takes every default and instruments with otel")
 	}
 }
 
@@ -1351,11 +1355,13 @@ func TestTypeScriptClientPublishesByOIDC(t *testing.T) {
 // files regen may touch are the generated ones, which carry a "do not
 // edit" header precisely because they are overwritten.
 //
-// generate.go is on the generated side, which is the less obvious
-// call: an author could reasonably add a directive to it. It names the
-// command that generates from the spec, and that command is this
-// tool's to change - a service whose directive regen cannot reach
-// keeps generating the old way forever.
+// generate_clients.go is on the generated side: it names the command
+// that generates from the spec, and that command is this tool's to
+// change - a service whose directive regen cannot reach keeps
+// generating the old way forever. generate.go is the author's, and is
+// a separate file for exactly that reason: the template invites them
+// to add generators to it, and regen would otherwise delete what they
+// added.
 func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	r, err := Get("go-service")
 	if err != nil {
@@ -1369,7 +1375,7 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 
 	// Authored: destroying any of these loses work that cannot be
 	// recovered from the template.
-	for _, authored := range []string{"openapi.yml", "server.go", "config.yaml", "main.go"} {
+	for _, authored := range []string{"openapi.yml", "server.go", "config.yaml", "main.go", "generate.go"} {
 		if set[authored] {
 			t.Errorf("regen would overwrite %s, which the author owns", authored)
 		}
@@ -1377,9 +1383,26 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	// Generated: a fix to one of these templates has to reach services
 	// that already exist, or regen is only useful on the day a service
 	// is created.
-	for _, generated := range []string{"generate.go", "api/client.go", "clients/ts/resilience.ts", "clients/ts/package.json"} {
+	for _, generated := range []string{"generate_clients.go", "api/client.go", "clients/ts/resilience.ts", "clients/ts/package.json"} {
 		if !set[generated] {
 			t.Errorf("regen does not rewrite %s; a template fix would never reach existing services", generated)
+		}
+	}
+}
+
+// The generator a scaffolded service runs is pinned to a version.
+//
+// `latest` would mean two machines generate different bytes from the
+// same spec, and CI's staleness gate - which is a plain `git diff
+// --exit-code` - turns that into a red build in a file nobody touched.
+// The gate only means something if generation is deterministic.
+func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
+	if !strings.HasPrefix(ClientgenVersion, "v") {
+		t.Errorf("ClientgenVersion is %q, which is not a version tag", ClientgenVersion)
+	}
+	for _, floating := range []string{"latest", "main", "master", "HEAD"} {
+		if strings.Contains(ClientgenVersion, floating) {
+			t.Errorf("ClientgenVersion is %q: a scaffolded service would generate from a moving target", ClientgenVersion)
 		}
 	}
 }

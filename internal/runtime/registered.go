@@ -9,11 +9,11 @@ func init() {
 		// spec produces the same output, so CI can run these and fail on
 		// a diff.
 		//
-		// One command, because the service's own go:generate runs
-		// oapi-clientgen, which generates the server, both clients and
-		// the resilience layer around them. This used to invoke
-		// hey-api here as well, which meant the TypeScript client was
-		// generated from a different place than the Go one.
+		// One command: the service's own go:generate runs
+		// oapi-clientgen, which writes the server, both clients and
+		// the resilience layer around them. Driving any part of that
+		// from here instead would generate it from a different place
+		// than the rest.
 		generate: [][]string{
 			{"go", "generate", "./..."},
 		},
@@ -41,10 +41,13 @@ func init() {
 			// Everything openapi.yml feeds. Dropped for a service built
 			// without one, which has no spec to derive them from.
 			"openapi.yml.tmpl": {dst: "openapi.yml", specOnly: true},
+			"generate.go.tmpl": {dst: "generate.go", specOnly: true},
 			// regen rewrites this one: it names the command that
 			// generates from the spec, and that is this tool's to
-			// change rather than the author's to maintain.
-			"generate.go.tmpl": {dst: "generate.go", specOnly: true, regen: true},
+			// change rather than the author's to maintain. Separate
+			// from generate.go precisely so rewriting it cannot
+			// take an author's own directives with it.
+			"generate_clients.go.tmpl": {dst: "generate_clients.go", specOnly: true, regen: true},
 
 			"scaffold_floor_test.go.tmpl": {dst: "scaffold_floor_test.go", plain: "scaffold_floor_test_plain.go.tmpl"},
 

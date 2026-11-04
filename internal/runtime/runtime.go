@@ -83,6 +83,25 @@ type Params struct {
 // drift from the version the generate step actually runs.
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 
+// ClientgenVersion pins the oapi-clientgen a scaffolded service
+// generates with.
+//
+// Pinned, and run through `go run`, so a service needs nothing
+// installed and two machines generate the same bytes from the same
+// spec - which is what lets CI fail on a diff at all. With @latest the
+// gate turns red on the day oapi-clientgen publishes, in a file nobody
+// touched.
+//
+// Here rather than in internal/codegen because that package belongs to
+// oapi-clientgen and cannot name its own version.
+const ClientgenVersion = "v0.0.8"
+
+// ClientgenCommand is the pinned invocation the //go:generate
+// directive runs.
+func (p Params) ClientgenCommand() string {
+	return "go run github.com/ChristopherScot/oapi-clientgen@" + ClientgenVersion
+}
+
 // HeyAPIConfig is the generated client's openapi-ts.config.ts.
 //
 // From internal/codegen, so a scaffolded service and a third-party
