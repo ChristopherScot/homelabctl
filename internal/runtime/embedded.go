@@ -34,14 +34,14 @@ type tmpl struct {
 	// regen marks a file `homelabctl regen` rewrites from its template.
 	//
 	// Deliberately separate from specOnly, which means "exists only for
-	// a spec-first service" and covers the spec INPUTS too: openapi.yml
-	// is the author's source of truth and ogen.yml is theirs to tune.
-	// Rewriting those from the template destroys the API - regen did
-	// exactly that once, replacing a five-endpoint spec with the
-	// two-endpoint scaffold.
+	// a spec-first service" and covers the spec INPUT too: openapi.yml
+	// is the author's source of truth. Rewriting it from the template
+	// destroys the API - regen did exactly that once, replacing a
+	// five-endpoint spec with the two-endpoint scaffold.
 	//
 	// Only generated OUTPUT belongs here: the clients, which exist to be
-	// overwritten and carry a "do not edit" header saying so.
+	// overwritten and carry a "do not edit" header saying so, and
+	// generate.go, which names the command that produces them.
 	regen bool
 
 	// plain replaces this template when the service has no spec. The
@@ -256,7 +256,7 @@ func (e embedded) clientFiles(p Params) []File {
 		Package: "api",
 		// A scaffolded service publishes its TypeScript client to npm
 		// under the owner's scope, so that is how a consumer imports it.
-		ImportPath: "@" + p.NPMScope() + "/" + p.Name + "-client",
+		ImportPath: p.NPMPackage(),
 		Published:  true,
 		// False because the scaffolded openapi.yml ships no
 		// securitySchemes, which is what decides whether ogen's

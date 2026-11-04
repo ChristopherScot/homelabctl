@@ -908,11 +908,18 @@ func TestGoServiceShipsAReadme(t *testing.T) {
 	}
 }
 
-// ogen instruments every operation with OpenTelemetry by default. Nothing
-// here collects traces - no tracer is configured and the cluster runs no
-// backend - so it cost a consumer 13 modules and ~1.5MB of binary to
-// produce spans that went nowhere.
-func TestGoServiceDisablesUnusedInstrumentation(t *testing.T) {
+// Generation goes through oapi-clientgen, which is what keeps ogen's
+// OpenTelemetry instrumentation off. Nothing here collects traces - no
+// tracer is configured and the cluster runs no backend - so it cost a
+// consumer 13 modules and ~1.5MB of binary to produce spans that went
+// nowhere.
+//
+// The config that disables it belongs to oapi-clientgen and is written
+// to a temp file per run, so a scaffolded service has none to inspect.
+// What this can still hold is that nothing generates around the tool:
+// a bare `go run ogen` here would take every default and bring otel
+// back.
+func TestGoServiceGeneratesThroughOapiClientgen(t *testing.T) {
 	r, err := Get("go-service")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -928,21 +935,15 @@ func TestGoServiceDisablesUnusedInstrumentation(t *testing.T) {
 		files[f.Path] = f.Body
 	}
 
-	cfg, ok := files["ogen.yml"]
-	if !ok {
-		t.Fatal("no ogen.yml, so generation takes every default")
-	}
-	if !strings.Contains(cfg, "ogen/otel") {
-		t.Error("ogen.yml does not disable otel instrumentation")
-	}
-
-	// The config only applies if the generate directive passes it.
 	gen, ok := files["generate.go"]
 	if !ok {
 		t.Fatal("no generate.go")
 	}
-	if !strings.Contains(gen, "ogen.yml") {
-		t.Error("generate.go does not pass --config, so ogen.yml is ignored")
+	if !strings.Contains(gen, "oapi-clientgen generate self") {
+		t.Error("generate.go does not generate through oapi-clientgen")
+	}
+	if strings.Contains(gen, "go run github.com/ogen-go/ogen") {
+		t.Error("generate.go runs ogen directly, which takes every default and instruments with otel")
 	}
 }
 
@@ -1341,14 +1342,20 @@ func TestTypeScriptClientPublishesByOIDC(t *testing.T) {
 	}
 }
 
-// regen rewrites generated clients and NOTHING the author owns.
+// regen rewrites generated files and NOTHING the author owns.
 //
 // This is not a style preference. specOnly means "exists only for a
-// spec-first service", which covers openapi.yml and ogen.yml - the spec
-// is the author's source of truth, and rewriting it from the template
+// spec-first service", which covers openapi.yml - the spec is the
+// author's source of truth, and rewriting it from the template
 // replaced a five-endpoint API with the two-endpoint scaffold. The
 // files regen may touch are the generated ones, which carry a "do not
 // edit" header precisely because they are overwritten.
+//
+// generate.go is on the generated side, which is the less obvious
+// call: an author could reasonably add a directive to it. It names the
+// command that generates from the spec, and that command is this
+// tool's to change - a service whose directive regen cannot reach
+// keeps generating the old way forever.
 func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	r, err := Get("go-service")
 	if err != nil {
@@ -1362,7 +1369,7 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 
 	// Authored: destroying any of these loses work that cannot be
 	// recovered from the template.
-	for _, authored := range []string{"openapi.yml", "ogen.yml", "server.go", "config.yaml", "main.go"} {
+	for _, authored := range []string{"openapi.yml", "server.go", "config.yaml", "main.go"} {
 		if set[authored] {
 			t.Errorf("regen would overwrite %s, which the author owns", authored)
 		}
@@ -1370,7 +1377,7 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	// Generated: a fix to one of these templates has to reach services
 	// that already exist, or regen is only useful on the day a service
 	// is created.
-	for _, generated := range []string{"api/client.go", "clients/ts/resilience.ts", "clients/ts/package.json"} {
+	for _, generated := range []string{"generate.go", "api/client.go", "clients/ts/resilience.ts", "clients/ts/package.json"} {
 		if !set[generated] {
 			t.Errorf("regen does not rewrite %s; a template fix would never reach existing services", generated)
 		}
