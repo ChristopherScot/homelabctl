@@ -90,7 +90,7 @@ client's version, and publishes the TypeScript client to npm.
 
 ```sh
 go get github.com/{{ .Owner }}/{{ .Name }}@v0.2.0
-npm install @{{ .NPMScope }}/{{ .Name }}-client@0.2.0
+npm install {{ .NPMPackage }}@0.2.0
 ```
 
 Go needs no registry — a tag on this repo is a module version. npm has no
@@ -102,7 +102,7 @@ Publishing uses npm trusted publishing (OIDC), so there is no token in
 this repo's secrets. It needs a one-time setup per package, once:
 
 ```sh
-npm trust github @{{ .NPMScope }}/{{ .Name }}-client \
+npm trust github {{ .NPMPackage }} \
   --file publish.yaml --repo {{ .Owner }}/{{ .RepoName }} --allow-publish
 ```
 

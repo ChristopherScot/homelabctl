@@ -78,17 +78,27 @@ type Params struct {
 	BuildSteps string
 }
 
-// OgenCommand is the pinned ogen invocation the //go:generate
-// directive runs. It comes from internal/codegen so the version a
-// scaffolded service generates with cannot drift from the version
-// `homelabctl client` generates with - they were two literals before,
-// with nothing comparing them.
-func (p Params) OgenCommand() string { return codegen.OgenCommand() }
-
 // HeyAPIVersion is the pinned @hey-api/openapi-ts the generated
 // client's package.json declares, from internal/codegen so it cannot
 // drift from the version the generate step actually runs.
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
+
+// ClientgenVersion pins the oapi-clientgen a scaffolded service
+// generates with.
+//
+// Pinned, and run through `go run`, so a service needs nothing
+// installed and two machines generate the same bytes from the same
+// spec - which is what lets CI fail on a diff at all. With @latest the
+// gate turns red on the day oapi-clientgen publishes, in a file nobody
+// touched.
+//
+// Here rather than in internal/codegen because that package belongs to
+// oapi-clientgen and cannot name its own version.
+const ClientgenVersion = "v0.0.8"
+
+func (p Params) ClientgenCommand() string {
+	return "go run github.com/ChristopherScot/oapi-clientgen@" + ClientgenVersion
+}
 
 // HeyAPIConfig is the generated client's openapi-ts.config.ts.
 //
@@ -286,6 +296,13 @@ func (p Params) RepoURL() string {
 // with a 400 that says only "Invalid package name".
 func (p Params) NPMScope() string {
 	return strings.ToLower(p.Owner)
+}
+
+// NPMPackage is the scoped name the service's TypeScript client is
+// published under, which is also how a consumer imports it and what
+// the generator has to be told to write into package.json.
+func (p Params) NPMPackage() string {
+	return "@" + p.NPMScope() + "/" + p.Name + "-client"
 }
 
 // Artifacts is everything a runtime contributes to a new repo.

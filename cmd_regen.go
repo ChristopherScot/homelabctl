@@ -78,17 +78,6 @@ func runRegen(cfgPath string, checkOnly bool) error {
 		return err
 	}
 
-	if checkOnly {
-		if len(stale) == 0 {
-			fmt.Println("clients are up to date with", specVersion)
-			return nil
-		}
-		for _, s := range stale {
-			fmt.Println("  -", s)
-		}
-		return fmt.Errorf("%d file(s) out of date - run `homelabctl regen`", len(stale))
-	}
-
 	// Rewrite the files the TEMPLATES own, not just the ones ogen writes.
 	//
 	// regen used to run the generate commands and stop, so a fix to a
@@ -125,6 +114,11 @@ func runRegen(cfgPath string, checkOnly bool) error {
 	for _, f := range r.Artifacts(params).Files {
 		rendered[f.Path] = f.Body
 	}
+	// --check reports from this same comparison rather than one of its
+	// own, so the question "is this file current" has one answer. It
+	// used to return before reaching here, on a `stale` list built only
+	// from the two version strings, and so called a service up to date
+	// while the files this tool owns differed from their templates.
 	for _, path := range r.SpecFiles() {
 		body, ok := rendered[path]
 		if !ok {
@@ -134,6 +128,10 @@ func runRegen(cfgPath string, checkOnly bool) error {
 		if old, err := os.ReadFile(full); err == nil && string(old) == body {
 			continue
 		}
+		if checkOnly {
+			stale = append(stale, path)
+			continue
+		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			return err
 		}
@@ -141,6 +139,17 @@ func runRegen(cfgPath string, checkOnly bool) error {
 			return fmt.Errorf("write %s: %w", path, err)
 		}
 		fmt.Println("  updated:", path)
+	}
+
+	if checkOnly {
+		if len(stale) == 0 {
+			fmt.Println("clients are up to date with", specVersion)
+			return nil
+		}
+		for _, s := range stale {
+			fmt.Println("  -", s)
+		}
+		return fmt.Errorf("%d file(s) out of date - run `homelabctl regen`", len(stale))
 	}
 
 	// Files this tool used to write and no longer does. Writing the

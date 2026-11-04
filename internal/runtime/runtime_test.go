@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -577,12 +578,16 @@ func TestGoServiceIsSpecFirst(t *testing.T) {
 	if _, ok := files["openapi.yml"]; !ok {
 		t.Error("no openapi.yml: the service has no API contract to generate from")
 	}
-	gen, ok := files["generate.go"]
+	gen, ok := files["generate_clients.go"]
 	if !ok {
-		t.Fatal("no generate.go: nothing regenerates the API")
+		t.Fatal("no generate_clients.go: nothing regenerates the API")
 	}
-	if !strings.Contains(gen, "go:generate") || !strings.Contains(gen, "ogen") {
-		t.Errorf("generate.go does not invoke ogen:\n%s", gen)
+	// The directive, not a word that happens to appear in the file.
+	// Matching "ogen" passed on the prose around it while the command
+	// it was meant to find - oapi-clientgen - does not contain that
+	// substring at all.
+	if !strings.Contains(gen, "//go:generate "+testParams().ClientgenCommand()+" generate self") {
+		t.Errorf("generate_clients.go does not invoke the generator:\n%s", gen)
 	}
 
 	// init runs Generate before Lock, and must: api/ does not exist until
@@ -908,11 +913,18 @@ func TestGoServiceShipsAReadme(t *testing.T) {
 	}
 }
 
-// ogen instruments every operation with OpenTelemetry by default. Nothing
-// here collects traces - no tracer is configured and the cluster runs no
-// backend - so it cost a consumer 13 modules and ~1.5MB of binary to
-// produce spans that went nowhere.
-func TestGoServiceDisablesUnusedInstrumentation(t *testing.T) {
+// Generation goes through oapi-clientgen, which is what keeps ogen's
+// OpenTelemetry instrumentation off. Nothing here collects traces - no
+// tracer is configured and the cluster runs no backend - so it cost a
+// consumer 13 modules and ~1.5MB of binary to produce spans that went
+// nowhere.
+//
+// The config that disables it belongs to oapi-clientgen and is written
+// to a temp file per run, so a scaffolded service has none to inspect.
+// What this can still hold is that nothing generates around the tool:
+// a bare `go run ogen` here would take every default and bring otel
+// back.
+func TestGoServiceGeneratesThroughOapiClientgen(t *testing.T) {
 	r, err := Get("go-service")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -928,21 +940,22 @@ func TestGoServiceDisablesUnusedInstrumentation(t *testing.T) {
 		files[f.Path] = f.Body
 	}
 
-	cfg, ok := files["ogen.yml"]
+	gen, ok := files["generate_clients.go"]
 	if !ok {
-		t.Fatal("no ogen.yml, so generation takes every default")
+		t.Fatal("no generate_clients.go")
 	}
-	if !strings.Contains(cfg, "ogen/otel") {
-		t.Error("ogen.yml does not disable otel instrumentation")
+	if !strings.Contains(gen, "oapi-clientgen@"+ClientgenVersion+" generate self") {
+		t.Errorf("generate_clients.go does not generate through oapi-clientgen %s", ClientgenVersion)
 	}
-
-	// The config only applies if the generate directive passes it.
-	gen, ok := files["generate.go"]
-	if !ok {
-		t.Fatal("no generate.go")
+	// Spelled out rather than built from ClientgenCommand, which would
+	// agree with itself however that changed. `go run` is the whole
+	// no-install property: `go install` renders a directive that reads
+	// fine and needs a binary on PATH that nothing puts there.
+	if !strings.Contains(gen, "//go:generate go run github.com/") {
+		t.Error("generate_clients.go does not run the generator with `go run`, so a checkout needs it installed")
 	}
-	if !strings.Contains(gen, "ogen.yml") {
-		t.Error("generate.go does not pass --config, so ogen.yml is ignored")
+	if strings.Contains(gen, "go run github.com/ogen-go/ogen") {
+		t.Error("generate_clients.go runs ogen directly, which takes every default and instruments with otel")
 	}
 }
 
@@ -1341,14 +1354,22 @@ func TestTypeScriptClientPublishesByOIDC(t *testing.T) {
 	}
 }
 
-// regen rewrites generated clients and NOTHING the author owns.
+// regen rewrites generated files and NOTHING the author owns.
 //
 // This is not a style preference. specOnly means "exists only for a
-// spec-first service", which covers openapi.yml and ogen.yml - the spec
-// is the author's source of truth, and rewriting it from the template
+// spec-first service", which covers openapi.yml - the spec is the
+// author's source of truth, and rewriting it from the template
 // replaced a five-endpoint API with the two-endpoint scaffold. The
 // files regen may touch are the generated ones, which carry a "do not
 // edit" header precisely because they are overwritten.
+//
+// generate_clients.go is on the generated side: it names the command
+// that generates from the spec, and that command is this tool's to
+// change - a service whose directive regen cannot reach keeps
+// generating the old way forever. generate.go is the author's, and is
+// a separate file for exactly that reason: the template invites them
+// to add generators to it, and regen would otherwise delete what they
+// added.
 func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	r, err := Get("go-service")
 	if err != nil {
@@ -1362,7 +1383,7 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 
 	// Authored: destroying any of these loses work that cannot be
 	// recovered from the template.
-	for _, authored := range []string{"openapi.yml", "ogen.yml", "server.go", "config.yaml", "main.go"} {
+	for _, authored := range []string{"openapi.yml", "server.go", "config.yaml", "main.go", "generate.go"} {
 		if set[authored] {
 			t.Errorf("regen would overwrite %s, which the author owns", authored)
 		}
@@ -1370,9 +1391,58 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	// Generated: a fix to one of these templates has to reach services
 	// that already exist, or regen is only useful on the day a service
 	// is created.
-	for _, generated := range []string{"api/client.go", "clients/ts/resilience.ts", "clients/ts/package.json"} {
+	for _, generated := range []string{"generate_clients.go", "api/client.go", "clients/ts/resilience.ts", "clients/ts/package.json"} {
 		if !set[generated] {
 			t.Errorf("regen does not rewrite %s; a template fix would never reach existing services", generated)
+		}
+	}
+}
+
+// The generator a scaffolded service runs is pinned to a version.
+//
+// `latest` would mean two machines generate different bytes from the
+// same spec, and CI's staleness gate - which is a plain `git diff
+// --exit-code` - turns that into a red build in a file nobody touched.
+// The gate only means something if generation is deterministic.
+func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
+	if !strings.HasPrefix(ClientgenVersion, "v") {
+		t.Errorf("ClientgenVersion is %q, which is not a version tag", ClientgenVersion)
+	}
+	for _, floating := range []string{"latest", "main", "master", "HEAD"} {
+		if strings.Contains(ClientgenVersion, floating) {
+			t.Errorf("ClientgenVersion is %q: a scaffolded service would generate from a moving target", ClientgenVersion)
+		}
+	}
+}
+
+// The pinned generator can run the directive the template emits.
+//
+// TestTheScaffoldedGeneratorIsPinned holds that the version is a tag
+// rather than a moving target; this holds that it is the RIGHT tag.
+// Setting it to a release without `generate self` - v0.0.6, say -
+// leaves every scaffolded service with a directive that fails on the
+// subcommand, which is the bug this pin was introduced to fix, and
+// nothing else here notices.
+//
+// Asks the generator for the flags the template passes rather than
+// running a generation: that is the part a wrong version gets wrong,
+// and it needs no spec and writes nothing.
+func TestThePinnedGeneratorAcceptsTheDirective(t *testing.T) {
+	if testing.Short() {
+		t.Skip("downloads the pinned generator")
+	}
+	argv := append(strings.Fields(testParams().ClientgenCommand()), "generate", "self", "--help")
+	out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s: %v\n%s", strings.Join(argv, " "), err, out)
+	}
+	// Cobra treats an unknown subcommand as an argument, so `generate
+	// self` on a version without it prints `generate`'s own help and
+	// exits 0. The flags are what tell the two apart.
+	for _, flag := range []string{"--ts-out", "--npm-package"} {
+		if !strings.Contains(string(out), flag) {
+			t.Errorf("oapi-clientgen %s has no %s: the scaffolded directive would fail",
+				ClientgenVersion, flag)
 		}
 	}
 }

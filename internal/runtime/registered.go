@@ -1,7 +1,5 @@
 package runtime
 
-import "github.com/ChristopherScot/oapi-clientgen/codegen"
-
 // The runtimes that ship with homelabctl. Adding a language means adding a
 // directory under templates/ and an entry here - no other code changes.
 func init() {
@@ -10,15 +8,14 @@ func init() {
 		// Everything derived from openapi.yml. Deterministic: the same
 		// spec produces the same output, so CI can run these and fail on
 		// a diff.
+		//
+		// One command: the service's own go:generate runs
+		// oapi-clientgen, which writes the server, both clients and
+		// the resilience layer around them. Driving any part of that
+		// from here instead would generate it from a different place
+		// than the rest.
 		generate: [][]string{
 			{"go", "generate", "./..."},
-			// The TypeScript client comes from the same spec. Run
-			// through npx so the pinned generator and its typescript
-			// peer stay out of the service's own dependencies, which
-			// stay current.
-			// Run from clients/ts: openapi-ts.config.ts lives there and
-			// resolves the spec relative to itself.
-			codegen.HeyAPICommandIn("clients/ts"),
 		},
 		// Without go.sum the service does not build at all. The client
 		// gets a lockfile too: it is published, and its build pins the
@@ -45,7 +42,12 @@ func init() {
 			// without one, which has no spec to derive them from.
 			"openapi.yml.tmpl": {dst: "openapi.yml", specOnly: true},
 			"generate.go.tmpl": {dst: "generate.go", specOnly: true},
-			"ogen.yml.tmpl":    {dst: "ogen.yml", specOnly: true},
+			// regen rewrites this one: it names the command that
+			// generates from the spec, and that is this tool's to
+			// change rather than the author's to maintain. Separate
+			// from generate.go precisely so rewriting it cannot
+			// take an author's own directives with it.
+			"generate_clients.go.tmpl": {dst: "generate_clients.go", specOnly: true, regen: true},
 
 			"scaffold_floor_test.go.tmpl": {dst: "scaffold_floor_test.go", plain: "scaffold_floor_test_plain.go.tmpl"},
 
