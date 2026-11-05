@@ -226,6 +226,11 @@ func syncVersions(dir, version string, checkOnly bool) ([]string, error) {
 				}
 			}
 		}
+	} else if !os.IsNotExist(err) {
+		// A missing file is left to runRegen's render comparison, which
+		// reports it as out of date. Any other read failure - permissions,
+		// I/O - is not "nothing to sync" and must not pass for it.
+		return nil, err
 	}
 
 	// clients/ts/, not the service root: that is where the generated
@@ -248,6 +253,10 @@ func syncVersions(dir, version string, checkOnly bool) ([]string, error) {
 				}
 			}
 		}
+	} else if !os.IsNotExist(err) {
+		// Same as api/client.go: missing files belong to the render
+		// comparison; other read failures are errors.
+		return nil, err
 	}
 	return stale, nil
 }
