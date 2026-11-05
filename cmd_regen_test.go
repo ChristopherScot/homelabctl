@@ -269,3 +269,33 @@ func TestRegenCheckSeesATemplateOwnedFileDrift(t *testing.T) {
 		t.Errorf("error = %v, want it to name files out of date", err)
 	}
 }
+
+// A read failure that is not "file missing" must not be mistaken for
+// "nothing to sync": --check would send the user to `homelabctl regen`,
+// which cannot open the file either. Replacing the file with a directory
+// gives a portable non-IsNotExist read error.
+func TestSyncVersionsReportsUnreadableClientFiles(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{"go client", "api/client.go"},
+		{"typescript package", filepath.Join("clients", "ts", "package.json")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := regenFixture(t, "1.0.0", "1.0.0", "1.0.0")
+			full := filepath.Join(dir, tc.path)
+			if err := os.Remove(full); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(full, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for _, checkOnly := range []bool{false, true} {
+				if _, err := syncVersions(dir, "1.0.0", checkOnly); err == nil {
+					t.Errorf("checkOnly=%v: unreadable %s reported as nothing to sync", checkOnly, tc.path)
+				}
+			}
+		})
+	}
+}
