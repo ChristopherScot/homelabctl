@@ -1,5 +1,5 @@
-github.com/ChristopherScot/oapi-clientgen v0.0.8 h1:Idfoo0z2o1a6SjmQSBsNromnRWDqGXij8wblW5AFq60=
-github.com/ChristopherScot/oapi-clientgen v0.0.8/go.mod h1:ODmNcgHT1pI5BEpe1CYlTbcNs0YvdYgY+7uB4KPxYAE=
+github.com/ChristopherScot/oapi-clientgen v0.0.9 h1:rpnQr05nfH/ITel35et4BIRqlwwlb9mlbBdgHdtV9rE=
+github.com/ChristopherScot/oapi-clientgen v0.0.9/go.mod h1:ODmNcgHT1pI5BEpe1CYlTbcNs0YvdYgY+7uB4KPxYAE=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
