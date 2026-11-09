@@ -31,7 +31,9 @@ func regenCmd() *cobra.Command {
 		Long: "Regenerate everything derived from openapi.yml: the server\n" +
 			"interface, both clients, and the versions they report.\n\n" +
 			"Run this after editing the spec. With --check it changes nothing\n" +
-			"and fails if anything is out of date, which is what CI wants.",
+			"and fails if a file this tool writes is out of date. It does not\n" +
+			"run the generator, so it says nothing about the generated client -\n" +
+			"CI regenerates and diffs instead, which covers both.",
 		Args: cobra.NoArgs,
 		RunE: func(*cobra.Command, []string) error {
 			path, err := findConfig()
@@ -143,7 +145,14 @@ func runRegen(cfgPath string, checkOnly bool) error {
 
 	if checkOnly {
 		if len(stale) == 0 {
-			fmt.Println("clients are up to date with", specVersion)
+			// Names what was compared, because it is not everything.
+			// The generated client is the generator's, written by the
+			// service's own go:generate, and this returns before the
+			// generate step runs - so a client file that is edited or
+			// deleted passes here and is caught by CI's `regen` plus
+			// `git diff --exit-code`, which does generate.
+			fmt.Println("the files this tool writes are up to date with", specVersion)
+			fmt.Println("  the generated client is checked by `homelabctl regen`, which runs the generator")
 			return nil
 		}
 		for _, s := range stale {
