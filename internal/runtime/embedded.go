@@ -113,13 +113,18 @@ func (e embedded) SpecFiles() []string {
 			out = append(out, t.dst)
 		}
 	}
-	// The client's hand-written half is owned by internal/apiclient
-	// rather than registered here, so it has to be listed from the
-	// same place Artifacts puts it - one inventory, asked twice, so
-	// adding a support file cannot reach new services only.
-	for _, f := range e.clientFiles(Params{Spec: true}) {
-		out = append(out, f.Path)
-	}
+	// The generated client is deliberately absent. A service's own
+	// go:generate runs `oapi-clientgen generate self`, which derives
+	// what the templates here cannot - which operations page, whether
+	// the spec declares a security scheme - and writes those files
+	// from it. Listing them here asks regen to render them a second
+	// time from a Params this package assembles by hand, which gets
+	// the derived fields wrong and reports a file stale that is not.
+	//
+	// regen runs the generate step after this comparison, so the
+	// correct file always won and only --check ever saw the bad
+	// rendering: it reported clients/ts/index.ts out of date forever
+	// on a paged service, unsatisfiable by regenerating. Issue #66.
 	sort.Strings(out)
 	return out
 }
