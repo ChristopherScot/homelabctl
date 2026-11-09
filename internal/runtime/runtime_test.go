@@ -1391,9 +1391,26 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	// Generated: a fix to one of these templates has to reach services
 	// that already exist, or regen is only useful on the day a service
 	// is created.
-	for _, generated := range []string{"generate_clients.go", "api/client.go", "clients/ts/resilience.ts", "clients/ts/package.json"} {
+	for _, generated := range []string{"generate_clients.go", "clients/ts/package.json"} {
 		if !set[generated] {
 			t.Errorf("regen does not rewrite %s; a template fix would never reach existing services", generated)
+		}
+	}
+
+	// The generated client is NOT here, and must not be. A fix to
+	// those reaches an existing service through the generator, which
+	// regen's generate step runs - `oapi-clientgen generate self`
+	// derives which operations page and whether the spec declares a
+	// security scheme, neither of which this package can see.
+	//
+	// Listing them asked regen to render them a second time from a
+	// hand-built Params that omits those fields. The generate step
+	// runs afterwards and wins, so the tree stayed correct and only
+	// --check saw the bad rendering - reporting clients/ts/index.ts
+	// stale forever on a paged service. Issue #66.
+	for _, generated := range []string{"api/client.go", "clients/ts/index.ts", "clients/ts/resilience.ts"} {
+		if set[generated] {
+			t.Errorf("regen renders %s, which the generator owns and derives from the spec", generated)
 		}
 	}
 }
