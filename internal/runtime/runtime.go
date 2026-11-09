@@ -94,7 +94,7 @@ func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 //
 // Here rather than in internal/codegen because that package belongs to
 // oapi-clientgen and cannot name its own version.
-const ClientgenVersion = "v0.0.8"
+const ClientgenVersion = "v0.0.9"
 
 func (p Params) ClientgenCommand() string {
 	return "go run github.com/ChristopherScot/oapi-clientgen@" + ClientgenVersion
