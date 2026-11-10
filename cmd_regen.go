@@ -164,7 +164,17 @@ func runRegen(cfgPath string, checkOnly bool) error {
 	// Files this tool used to write and no longer does. Writing the
 	// current list leaves the dropped ones on disk, unmanaged, in a
 	// service that was scaffolded before they were dropped.
-	removed, err := apiclient.RemoveRetired(filepath.Join(dir, "api"))
+	//
+	// Nil because neither retired name is one this tool renders: it
+	// writes api/client.go and api/paging.go through apiclient.Go,
+	// and the retired names are generated TESTS, from GoTests, which
+	// nothing here calls.
+	//
+	// If that changes, pass the rendered set as BARE filenames.
+	// RemoveRetired keys on those, and this tool's paths carry the
+	// "api/" prefix - which does not match, so the file named would
+	// be deleted rather than protected. Failing open, and silently.
+	removed, err := apiclient.RemoveRetired(filepath.Join(dir, "api"), nil)
 	if err != nil {
 		return err
 	}
