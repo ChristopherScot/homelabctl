@@ -110,12 +110,14 @@ func (p Params) ClientgenCommand() string {
 // config pointing at a spec that is not there, and generation failed
 // with "open clients/typescript/openapi-ts.config.ts: no such file".
 //
-// NOT the only place the directory is named. cmd_regen.go and
-// cmd_init.go spell it out, and the shipped publish.yaml, Dockerfile,
-// Makefile.tmpl, gitignore.tmpl and READMEs carry it as text - the
-// first two search for it with a shell glob, which no Go constant can
-// reach. Moving the client means editing those too; this constant only
-// promises that what internal/runtime renders stays self-consistent.
+// NOT the only place the directory is named: `grep -rn clients/ts`
+// is the list, around sixty occurrences across the CLI, the shipped
+// templates and the docs. publish.yaml and the Dockerfile find the
+// client with a shell glob no Go constant can reach, and the docs
+// show the path to people who copy it. Moving the client means
+// editing all of that; this constant only promises that what
+// internal/runtime renders stays self-consistent, which the tests
+// enforce.
 //
 // A plain relative path: no trailing slash, no leading "./" and no "."
 // segments, because TSClientSpecPath counts one ".." per "/"-separated

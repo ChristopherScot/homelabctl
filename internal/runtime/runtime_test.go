@@ -1487,17 +1487,23 @@ func TestEverythingAgreesOnTheClientDirectory(t *testing.T) {
 	}
 }
 
+// Either quoting the generator might emit. Package-level because
+// regexp.MustCompile belongs at initialisation, not in a call.
+var (
+	specDoubleQuoted = regexp.MustCompile(`input:\s*"([^"]*)"`)
+	specSingleQuoted = regexp.MustCompile(`input:\s*'([^']*)'`)
+)
+
 // specPathFrom returns the input path openapi-ts.config.ts names.
 func specPathFrom(t *testing.T, cfg string) string {
 	t.Helper()
-	m := regexp.MustCompile(`input:\s*'([^']*)'`).FindStringSubmatch(cfg)
-	if m == nil {
-		m = regexp.MustCompile(`input:\s*"([^"]*)"`).FindStringSubmatch(cfg)
+	for _, re := range []*regexp.Regexp{specDoubleQuoted, specSingleQuoted} {
+		if m := re.FindStringSubmatch(cfg); m != nil {
+			return m[1]
+		}
 	}
-	if m == nil {
-		t.Fatalf("openapi-ts.config.ts names no input path:\n%s", cfg)
-	}
-	return m[1]
+	t.Fatalf("openapi-ts.config.ts names no input path:\n%s", cfg)
+	return ""
 }
 
 // resolveFrom walks rel out of dir, the way a tool reading a config in
