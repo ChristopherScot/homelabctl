@@ -291,7 +291,7 @@ func (e embedded) clientFiles(p Params) []File {
 		panic(err)
 	}
 	for _, f := range tsFiles {
-		out = append(out, File{Path: "clients/ts/" + f.Path, Body: f.Body})
+		out = append(out, File{Path: TSClientDir + "/" + f.Path, Body: f.Body})
 	}
 	return out
 }

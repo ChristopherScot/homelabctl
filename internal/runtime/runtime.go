@@ -100,6 +100,48 @@ func (p Params) ClientgenCommand() string {
 	return "go run github.com/ChristopherScot/oapi-clientgen@" + ClientgenVersion
 }
 
+// TSClientDir is where a scaffolded service's TypeScript client
+// lives, relative to the service.
+//
+// What this package renders reads it: the directive's --ts-out, the
+// paths every client file is written to, and the depth of the relative
+// spec path inside openapi-ts.config.ts. Those were three literals
+// with nothing comparing them - changing --ts-out alone left the
+// config pointing at a spec that is not there, and generation failed
+// with "open clients/typescript/openapi-ts.config.ts: no such file".
+//
+// NOT the only place the directory is named: `grep -rn clients/ts`
+// is the list, around sixty occurrences across the CLI, the shipped
+// templates and the docs. publish.yaml and the Dockerfile find the
+// client with a shell glob no Go constant can reach, and the docs
+// show the path to people who copy it. Moving the client means
+// editing all of that; this constant only promises that what
+// internal/runtime renders stays self-consistent, which the tests
+// enforce.
+//
+// A plain relative path: no trailing slash, no leading "./" and no "."
+// segments, because TSClientSpecPath counts one ".." per "/"-separated
+// segment and any of those would overcount.
+const TSClientDir = "clients/ts"
+
+// TSClientDir exposes the constant to templates, which can call a
+// method but cannot read a package-level identifier. Ignores its
+// receiver: the directory is the same for every service, not
+// per-service configuration.
+func (p Params) TSClientDir() string { return TSClientDir }
+
+// TSClientSpecPath is the spec as openapi-ts.config.ts names it:
+// relative, because that file is COMMITTED and read on machines that
+// never saw the one that scaffolded it, where an absolute path points
+// at nothing.
+//
+// Derived from TSClientDir rather than written, so the ".." count
+// cannot disagree with the depth it is counting.
+func TSClientSpecPath() string {
+	up := strings.Repeat("../", len(strings.Split(TSClientDir, "/")))
+	return up + "openapi.yml"
+}
+
 // HeyAPIConfig is the generated client's openapi-ts.config.ts.
 //
 // From internal/codegen, so a scaffolded service and a third-party
@@ -107,13 +149,11 @@ func (p Params) ClientgenCommand() string {
 // files live above the directory hey-api clears, and that is only true
 // if both configs say so.
 //
-// Relative, unlike the third-party case: this file is COMMITTED to the
-// service's repo and read on other machines, where an absolute path
-// from the machine that scaffolded it would point at nothing. It
+// Relative, unlike the third-party case: see TSClientSpecPath. It
 // resolves correctly because a scaffolded client sits at its own
 // package root, which is where npx puts the working directory.
 func (p Params) HeyAPIConfig() string {
-	return codegen.HeyAPIConfigAtRoot("../../openapi.yml")
+	return codegen.HeyAPIConfigAtRoot(TSClientSpecPath())
 }
 
 // BinaryName is what `go build` with no -o produces: the last element of

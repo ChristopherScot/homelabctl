@@ -25,7 +25,7 @@ func init() {
 		// installs when it builds.
 		lock: [][]string{
 			{"go", "mod", "tidy"},
-			{"sh", "-c", "cd 'clients/ts' && npm install --package-lock-only --no-audit --no-fund"},
+			{"sh", "-c", "cd '" + TSClientDir + "' && npm install --package-lock-only --no-audit --no-fund"},
 		},
 		// A new service starts on current transitive versions; tidy alone
 		// resolves to the minimums each dependency declares, which are
@@ -59,9 +59,9 @@ func init() {
 			// a monorepo puts the service at services/<name>/. The client
 			// is published to npmjs instead, so nothing installs from git
 			// and the manifest can live where it belongs.
-			"clients_ts_package.json.tmpl":         {dst: "clients/ts/package.json", specOnly: true, regen: true},
-			"clients_ts_openapi_ts_config.ts.tmpl": {dst: "clients/ts/openapi-ts.config.ts", specOnly: true, regen: true},
-			"clients_ts_tsconfig.json.tmpl":        {dst: "clients/ts/tsconfig.json", specOnly: true, regen: true},
+			"clients_ts_package.json.tmpl":         {dst: TSClientDir + "/package.json", specOnly: true, regen: true},
+			"clients_ts_openapi_ts_config.ts.tmpl": {dst: TSClientDir + "/openapi-ts.config.ts", specOnly: true, regen: true},
+			"clients_ts_tsconfig.json.tmpl":        {dst: TSClientDir + "/tsconfig.json", specOnly: true, regen: true},
 
 			"gitignore.tmpl": {dst: ".gitignore"},
 			"Makefile.tmpl":  {dst: "Makefile"},

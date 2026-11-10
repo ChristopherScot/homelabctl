@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -1413,6 +1414,116 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 			t.Errorf("regen renders %s, which the generator owns and derives from the spec", generated)
 		}
 	}
+}
+
+// Everything that names the TypeScript client's directory agrees.
+//
+// Four things have to: the directive's --ts-out, the paths the client's
+// own sources are rendered to, the paths its manifests are rendered to,
+// and the number of ".." in the spec path inside openapi-ts.config.ts.
+// They were four literals with nothing comparing them, so changing
+// --ts-out alone left the config naming a spec that is not there and
+// generation failed with "open clients/typescript/openapi-ts.config.ts:
+// no such file".
+//
+// Checks every rendered client file rather than the three this test's
+// first version happened to name: moving TSClientDir once left the
+// sources in clients/ts and the manifests in the new directory, and a
+// test that only looked at the manifests passed.
+func TestEverythingAgreesOnTheClientDirectory(t *testing.T) {
+	r, err := Get("go-service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	for _, f := range r.Artifacts(testParams()).Files {
+		files[f.Path] = f.Body
+	}
+
+	// The client is made of these, wherever it lives. Named rather
+	// than discovered, so losing one is a failure and not a silently
+	// shorter loop.
+	for _, name := range []string{
+		"index.ts", "paging.ts", "resilience.ts",
+		"package.json", "openapi-ts.config.ts", "tsconfig.json",
+	} {
+		if _, ok := files[TSClientDir+"/"+name]; !ok {
+			var elsewhere string
+			for path := range files {
+				if strings.HasSuffix(path, "/"+name) {
+					elsewhere = path
+					break
+				}
+			}
+			if elsewhere != "" {
+				t.Errorf("%s is rendered to %s, not under %s, so the client is split across two directories",
+					name, elsewhere, TSClientDir)
+				continue
+			}
+			t.Errorf("%s is not rendered under %s", name, TSClientDir)
+		}
+	}
+
+	gen, ok := files["generate_clients.go"]
+	if !ok {
+		t.Fatal("no generate_clients.go")
+	}
+	if !strings.Contains(gen, "--ts-out "+TSClientDir+" ") {
+		t.Errorf("the directive does not send --ts-out to %s:\n%s", TSClientDir, gen)
+	}
+
+	cfg, ok := files[TSClientDir+"/openapi-ts.config.ts"]
+	if !ok {
+		t.Fatalf("no %s/openapi-ts.config.ts, so the generator has nothing to read", TSClientDir)
+	}
+	// Resolved, not recomputed: repeating TSClientSpecPath's own
+	// expression here would move with it and never catch a wrong
+	// count. What matters is where the path lands from inside the
+	// directory the config sits in.
+	spec := specPathFrom(t, cfg)
+	if got := resolveFrom(TSClientDir, spec); got != "openapi.yml" {
+		t.Errorf("the config's spec path %q resolves to %q from %s, want the service's openapi.yml",
+			spec, got, TSClientDir)
+	}
+}
+
+// Either quoting the generator might emit. Package-level because
+// regexp.MustCompile belongs at initialisation, not in a call.
+var (
+	specDoubleQuoted = regexp.MustCompile(`input:\s*"([^"]*)"`)
+	specSingleQuoted = regexp.MustCompile(`input:\s*'([^']*)'`)
+)
+
+// specPathFrom returns the input path openapi-ts.config.ts names.
+func specPathFrom(t *testing.T, cfg string) string {
+	t.Helper()
+	for _, re := range []*regexp.Regexp{specDoubleQuoted, specSingleQuoted} {
+		if m := re.FindStringSubmatch(cfg); m != nil {
+			return m[1]
+		}
+	}
+	t.Fatalf("openapi-ts.config.ts names no input path:\n%s", cfg)
+	return ""
+}
+
+// resolveFrom walks rel out of dir, the way a tool reading a config in
+// dir would. Forward slashes throughout: the result is a path inside a
+// committed TypeScript config, not a path on this machine.
+func resolveFrom(dir, rel string) string {
+	segs := strings.Split(dir, "/")
+	for _, part := range strings.Split(rel, "/") {
+		switch part {
+		case "..":
+			if len(segs) == 0 {
+				return "<above the service root>"
+			}
+			segs = segs[:len(segs)-1]
+		case ".", "":
+		default:
+			segs = append(segs, part)
+		}
+	}
+	return strings.Join(segs, "/")
 }
 
 // The generator a scaffolded service runs is pinned to a version.
