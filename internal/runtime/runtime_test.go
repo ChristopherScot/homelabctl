@@ -1420,6 +1420,47 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 // `latest` would mean two machines generate different bytes from the
 // same spec, and CI's staleness gate - which is a plain `git diff
 // --exit-code` - turns that into a red build in a file nobody touched.
+
+// Everything that names the TypeScript client's directory agrees.
+//
+// Three things have to: the directive's --ts-out, the paths the
+// templates are written to, and the number of ".." in the spec path
+// inside openapi-ts.config.ts. They were three literals with nothing
+// comparing them, so changing --ts-out alone left the config naming a
+// spec that is not there and generation failed with "open
+// clients/typescript/openapi-ts.config.ts: no such file".
+//
+// Checks the rendered output against TSClientDir rather than against
+// "clients/ts", so moving the client is one edit and this still holds.
+func TestEverythingAgreesOnTheClientDirectory(t *testing.T) {
+	r, err := Get("go-service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	for _, f := range r.Artifacts(testParams()).Files {
+		files[f.Path] = f.Body
+	}
+
+	gen, ok := files["generate_clients.go"]
+	if !ok {
+		t.Fatal("no generate_clients.go")
+	}
+	if !strings.Contains(gen, "--ts-out "+TSClientDir+" ") {
+		t.Errorf("the directive does not send --ts-out to %s:\n%s", TSClientDir, gen)
+	}
+
+	cfg, ok := files[TSClientDir+"/openapi-ts.config.ts"]
+	if !ok {
+		t.Fatalf("no %s/openapi-ts.config.ts, so the generator has nothing to read", TSClientDir)
+	}
+	// One ".." per segment of the directory the config sits in.
+	want := strings.Repeat("../", len(strings.Split(TSClientDir, "/"))) + "openapi.yml"
+	if !strings.Contains(cfg, want) {
+		t.Errorf("the config does not name the spec as %q, so it points outside the service:\n%s", want, cfg)
+	}
+}
+
 // The gate only means something if generation is deterministic.
 func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
 	if !strings.HasPrefix(ClientgenVersion, "v") {
