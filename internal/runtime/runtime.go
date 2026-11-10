@@ -103,16 +103,29 @@ func (p Params) ClientgenCommand() string {
 // TSClientDir is where a scaffolded service's TypeScript client
 // lives, relative to the service.
 //
-// One declaration because three things have to agree about it: the
-// directive's --ts-out, the paths the templates are written to, and
-// the depth of the relative spec path inside openapi-ts.config.ts.
-// They were three literals, and nothing compared them - changing
-// --ts-out alone left the config pointing at a spec that is not
-// there, and generation failed with "open
-// clients/typescript/openapi-ts.config.ts: no such file".
+// What this package renders reads it: the directive's --ts-out, the
+// paths every client file is written to, and the depth of the relative
+// spec path inside openapi-ts.config.ts. Those were three literals
+// with nothing comparing them - changing --ts-out alone left the
+// config pointing at a spec that is not there, and generation failed
+// with "open clients/typescript/openapi-ts.config.ts: no such file".
+//
+// NOT the only place the directory is named. cmd_regen.go and
+// cmd_init.go spell it out, and the shipped publish.yaml, Dockerfile,
+// Makefile.tmpl, gitignore.tmpl and READMEs carry it as text - the
+// first two search for it with a shell glob, which no Go constant can
+// reach. Moving the client means editing those too; this constant only
+// promises that what internal/runtime renders stays self-consistent.
+//
+// A plain relative path: no trailing slash, no leading "./" and no "."
+// segments, because TSClientSpecPath counts one ".." per "/"-separated
+// segment and any of those would overcount.
 const TSClientDir = "clients/ts"
 
-// TSClientDir, for a template that names the directory.
+// TSClientDir exposes the constant to templates, which can call a
+// method but cannot read a package-level identifier. Ignores its
+// receiver: the directory is the same for every service, not
+// per-service configuration.
 func (p Params) TSClientDir() string { return TSClientDir }
 
 // TSClientSpecPath is the spec as openapi-ts.config.ts names it:

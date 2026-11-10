@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -1415,23 +1416,20 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 	}
 }
 
-// The generator a scaffolded service runs is pinned to a version.
-//
-// `latest` would mean two machines generate different bytes from the
-// same spec, and CI's staleness gate - which is a plain `git diff
-// --exit-code` - turns that into a red build in a file nobody touched.
-
 // Everything that names the TypeScript client's directory agrees.
 //
-// Three things have to: the directive's --ts-out, the paths the
-// templates are written to, and the number of ".." in the spec path
-// inside openapi-ts.config.ts. They were three literals with nothing
-// comparing them, so changing --ts-out alone left the config naming a
-// spec that is not there and generation failed with "open
-// clients/typescript/openapi-ts.config.ts: no such file".
+// Four things have to: the directive's --ts-out, the paths the client's
+// own sources are rendered to, the paths its manifests are rendered to,
+// and the number of ".." in the spec path inside openapi-ts.config.ts.
+// They were four literals with nothing comparing them, so changing
+// --ts-out alone left the config naming a spec that is not there and
+// generation failed with "open clients/typescript/openapi-ts.config.ts:
+// no such file".
 //
-// Checks the rendered output against TSClientDir rather than against
-// "clients/ts", so moving the client is one edit and this still holds.
+// Checks every rendered client file rather than the three this test's
+// first version happened to name: moving TSClientDir once left the
+// sources in clients/ts and the manifests in the new directory, and a
+// test that only looked at the manifests passed.
 func TestEverythingAgreesOnTheClientDirectory(t *testing.T) {
 	r, err := Get("go-service")
 	if err != nil {
@@ -1440,6 +1438,30 @@ func TestEverythingAgreesOnTheClientDirectory(t *testing.T) {
 	files := map[string]string{}
 	for _, f := range r.Artifacts(testParams()).Files {
 		files[f.Path] = f.Body
+	}
+
+	// The client is made of these, wherever it lives. Named rather
+	// than discovered, so losing one is a failure and not a silently
+	// shorter loop.
+	for _, name := range []string{
+		"index.ts", "paging.ts", "resilience.ts",
+		"package.json", "openapi-ts.config.ts", "tsconfig.json",
+	} {
+		if _, ok := files[TSClientDir+"/"+name]; !ok {
+			var elsewhere string
+			for path := range files {
+				if strings.HasSuffix(path, "/"+name) {
+					elsewhere = path
+					break
+				}
+			}
+			if elsewhere != "" {
+				t.Errorf("%s is rendered to %s, not under %s, so the client is split across two directories",
+					name, elsewhere, TSClientDir)
+				continue
+			}
+			t.Errorf("%s is not rendered under %s", name, TSClientDir)
+		}
 	}
 
 	gen, ok := files["generate_clients.go"]
@@ -1454,13 +1476,55 @@ func TestEverythingAgreesOnTheClientDirectory(t *testing.T) {
 	if !ok {
 		t.Fatalf("no %s/openapi-ts.config.ts, so the generator has nothing to read", TSClientDir)
 	}
-	// One ".." per segment of the directory the config sits in.
-	want := strings.Repeat("../", len(strings.Split(TSClientDir, "/"))) + "openapi.yml"
-	if !strings.Contains(cfg, want) {
-		t.Errorf("the config does not name the spec as %q, so it points outside the service:\n%s", want, cfg)
+	// Resolved, not recomputed: repeating TSClientSpecPath's own
+	// expression here would move with it and never catch a wrong
+	// count. What matters is where the path lands from inside the
+	// directory the config sits in.
+	spec := specPathFrom(t, cfg)
+	if got := resolveFrom(TSClientDir, spec); got != "openapi.yml" {
+		t.Errorf("the config's spec path %q resolves to %q from %s, want the service's openapi.yml",
+			spec, got, TSClientDir)
 	}
 }
 
+// specPathFrom returns the input path openapi-ts.config.ts names.
+func specPathFrom(t *testing.T, cfg string) string {
+	t.Helper()
+	m := regexp.MustCompile(`input:\s*'([^']*)'`).FindStringSubmatch(cfg)
+	if m == nil {
+		m = regexp.MustCompile(`input:\s*"([^"]*)"`).FindStringSubmatch(cfg)
+	}
+	if m == nil {
+		t.Fatalf("openapi-ts.config.ts names no input path:\n%s", cfg)
+	}
+	return m[1]
+}
+
+// resolveFrom walks rel out of dir, the way a tool reading a config in
+// dir would. Forward slashes throughout: the result is a path inside a
+// committed TypeScript config, not a path on this machine.
+func resolveFrom(dir, rel string) string {
+	segs := strings.Split(dir, "/")
+	for _, part := range strings.Split(rel, "/") {
+		switch part {
+		case "..":
+			if len(segs) == 0 {
+				return "<above the service root>"
+			}
+			segs = segs[:len(segs)-1]
+		case ".", "":
+		default:
+			segs = append(segs, part)
+		}
+	}
+	return strings.Join(segs, "/")
+}
+
+// The generator a scaffolded service runs is pinned to a version.
+//
+// `latest` would mean two machines generate different bytes from the
+// same spec, and CI's staleness gate - which is a plain `git diff
+// --exit-code` - turns that into a red build in a file nobody touched.
 // The gate only means something if generation is deterministic.
 func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
 	if !strings.HasPrefix(ClientgenVersion, "v") {
