@@ -1,6 +1,6 @@
 v1.21.7
 
-v1.21.7 services generate with oapi-clientgen v0.0.10
+v1.21.7 regen retires generated test files it no longer writes, and leaves yours alone
 v1.21.6 generated clients carry their spec's constraints in the doc comment
 v1.21.5 the README's breaker example compiles, and says when it really trips
 v1.21.4 the generated clients break on a failure rate, not a run of failures
