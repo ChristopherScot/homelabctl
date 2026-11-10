@@ -165,10 +165,14 @@ func runRegen(cfgPath string, checkOnly bool) error {
 	// current list leaves the dropped ones on disk, unmanaged, in a
 	// service that was scaffolded before they were dropped.
 	//
-	// Nothing being written: api/ is the generator's, and this tool
-	// stopped rendering into it. The argument is what the caller just
-	// rendered there, so that a name it is actively writing is not
-	// retired out from under it - and there is none.
+	// The second argument is what the caller just rendered into that
+	// directory, so a name it is actively writing is not retired out
+	// from under it. Nil because this tool renders neither retired
+	// name: clientFiles writes api/client.go and api/paging.go, and
+	// the generated tests those names belong to are the generator's,
+	// which regen runs afterwards. Were that to change, passing the
+	// rendered set would matter - a file being written would be
+	// deleted first.
 	removed, err := apiclient.RemoveRetired(filepath.Join(dir, "api"), nil)
 	if err != nil {
 		return err
