@@ -164,7 +164,12 @@ func runRegen(cfgPath string, checkOnly bool) error {
 	// Files this tool used to write and no longer does. Writing the
 	// current list leaves the dropped ones on disk, unmanaged, in a
 	// service that was scaffolded before they were dropped.
-	removed, err := apiclient.RemoveRetired(filepath.Join(dir, "api"))
+	//
+	// Nothing being written: api/ is the generator's, and this tool
+	// stopped rendering into it. The argument is what the caller just
+	// rendered there, so that a name it is actively writing is not
+	// retired out from under it - and there is none.
+	removed, err := apiclient.RemoveRetired(filepath.Join(dir, "api"), nil)
 	if err != nil {
 		return err
 	}
