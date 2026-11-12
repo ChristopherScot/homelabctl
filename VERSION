@@ -1,5 +1,6 @@
-v1.21.7
+v1.21.8
 
+v1.21.8 services generate with oapi-gen: new module path, and an operation pages only if its spec says so
 v1.21.7 regen retires generated test files it no longer writes, and leaves yours alone
 v1.21.6 generated clients carry their spec's constraints in the doc comment
 v1.21.5 the README's breaker example compiles, and says when it really trips

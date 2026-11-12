@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ChristopherScot/oapi-clientgen/codegen"
+	"github.com/ChristopherScot/oapi-gen/codegen"
 )
 
 // InitialSpecVersion is where a new service's API starts. It reaches both
@@ -83,21 +83,21 @@ type Params struct {
 // drift from the version the generate step actually runs.
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 
-// ClientgenVersion pins the oapi-clientgen a scaffolded service
+// OapiGenVersion pins the oapi-gen a scaffolded service
 // generates with.
 //
 // Pinned, and run through `go run`, so a service needs nothing
 // installed and two machines generate the same bytes from the same
 // spec - which is what lets CI fail on a diff at all. With @latest the
-// gate turns red on the day oapi-clientgen publishes, in a file nobody
+// gate turns red on the day oapi-gen publishes, in a file nobody
 // touched.
 //
 // Here rather than in internal/codegen because that package belongs to
-// oapi-clientgen and cannot name its own version.
-const ClientgenVersion = "v0.0.10"
+// oapi-gen and cannot name its own version.
+const OapiGenVersion = "v0.1.0"
 
-func (p Params) ClientgenCommand() string {
-	return "go run github.com/ChristopherScot/oapi-clientgen@" + ClientgenVersion
+func (p Params) OapiGenCommand() string {
+	return "go run github.com/ChristopherScot/oapi-gen@" + OapiGenVersion
 }
 
 // TSClientDir is where a scaffolded service's TypeScript client

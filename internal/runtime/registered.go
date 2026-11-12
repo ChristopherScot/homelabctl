@@ -10,7 +10,7 @@ func init() {
 		// a diff.
 		//
 		// One command: the service's own go:generate runs
-		// oapi-clientgen, which writes the server, both clients and
+		// oapi-gen, which writes the server, both clients and
 		// the resilience layer around them. Driving any part of that
 		// from here instead would generate it from a different place
 		// than the rest.
