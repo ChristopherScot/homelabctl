@@ -40,6 +40,11 @@ deploy/              Kubernetes manifests, rendered from config.yaml
 config.yaml          what this service is, for homelabctl
 ```
 
+An operation gets a typed iterator when its spec says it pages:
+add `x-oapi-gen-pagination: {}` to the operation in `openapi.yml`.
+Without it the generic helpers in `paging.go` are still there, but
+nothing wraps that operation.
+
 `server.go` is the seam: a service whose shape the spec cannot express - a
 reverse proxy, say - replaces that one file with a hand-written
 `handler()`, and everything else stays as generated. Its header lists what

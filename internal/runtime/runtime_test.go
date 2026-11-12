@@ -585,9 +585,9 @@ func TestGoServiceIsSpecFirst(t *testing.T) {
 	}
 	// The directive, not a word that happens to appear in the file.
 	// Matching "ogen" passed on the prose around it while the command
-	// it was meant to find - oapi-clientgen - does not contain that
+	// it was meant to find - oapi-gen - does not contain that
 	// substring at all.
-	if !strings.Contains(gen, "//go:generate "+testParams().ClientgenCommand()+" generate self") {
+	if !strings.Contains(gen, "//go:generate "+testParams().OapiGenCommand()+" generate self") {
 		t.Errorf("generate_clients.go does not invoke the generator:\n%s", gen)
 	}
 
@@ -798,7 +798,7 @@ func TestGoServiceShipsATypeScriptClient(t *testing.T) {
 	// leave the substring behind and pass. Each of these is a name a
 	// consumer imports, so a rename is a breaking change and fails.
 	//
-	// They come from oapi-clientgen's template, so a failure here is a
+	// They come from oapi-gen's template, so a failure here is a
 	// contract change to read, not a list to update.
 	for _, want := range []string{
 		"export const ClientVersionHeader", "export const ClientNameHeader",
@@ -914,18 +914,18 @@ func TestGoServiceShipsAReadme(t *testing.T) {
 	}
 }
 
-// Generation goes through oapi-clientgen, which is what keeps ogen's
+// Generation goes through oapi-gen, which is what keeps ogen's
 // OpenTelemetry instrumentation off. Nothing here collects traces - no
 // tracer is configured and the cluster runs no backend - so it cost a
 // consumer 13 modules and ~1.5MB of binary to produce spans that went
 // nowhere.
 //
-// The config that disables it belongs to oapi-clientgen and is written
+// The config that disables it belongs to oapi-gen and is written
 // to a temp file per run, so a scaffolded service has none to inspect.
 // What this can still hold is that nothing generates around the tool:
 // a bare `go run ogen` here would take every default and bring otel
 // back.
-func TestGoServiceGeneratesThroughOapiClientgen(t *testing.T) {
+func TestGoServiceGeneratesThroughOapiGen(t *testing.T) {
 	r, err := Get("go-service")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -945,10 +945,10 @@ func TestGoServiceGeneratesThroughOapiClientgen(t *testing.T) {
 	if !ok {
 		t.Fatal("no generate_clients.go")
 	}
-	if !strings.Contains(gen, "oapi-clientgen@"+ClientgenVersion+" generate self") {
-		t.Errorf("generate_clients.go does not generate through oapi-clientgen %s", ClientgenVersion)
+	if !strings.Contains(gen, "oapi-gen@"+OapiGenVersion+" generate self") {
+		t.Errorf("generate_clients.go does not generate through oapi-gen %s", OapiGenVersion)
 	}
-	// Spelled out rather than built from ClientgenCommand, which would
+	// Spelled out rather than built from OapiGenCommand, which would
 	// agree with itself however that changed. `go run` is the whole
 	// no-install property: `go install` renders a directive that reads
 	// fine and needs a binary on PATH that nothing puts there.
@@ -1400,7 +1400,7 @@ func TestRegenRewritesOnlyGeneratedFiles(t *testing.T) {
 
 	// The generated client is NOT here, and must not be. A fix to
 	// those reaches an existing service through the generator, which
-	// regen's generate step runs - `oapi-clientgen generate self`
+	// regen's generate step runs - `oapi-gen generate self`
 	// derives which operations page and whether the spec declares a
 	// security scheme, neither of which this package can see.
 	//
@@ -1533,12 +1533,12 @@ func resolveFrom(dir, rel string) string {
 // --exit-code` - turns that into a red build in a file nobody touched.
 // The gate only means something if generation is deterministic.
 func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
-	if !strings.HasPrefix(ClientgenVersion, "v") {
-		t.Errorf("ClientgenVersion is %q, which is not a version tag", ClientgenVersion)
+	if !strings.HasPrefix(OapiGenVersion, "v") {
+		t.Errorf("OapiGenVersion is %q, which is not a version tag", OapiGenVersion)
 	}
 	for _, floating := range []string{"latest", "main", "master", "HEAD"} {
-		if strings.Contains(ClientgenVersion, floating) {
-			t.Errorf("ClientgenVersion is %q: a scaffolded service would generate from a moving target", ClientgenVersion)
+		if strings.Contains(OapiGenVersion, floating) {
+			t.Errorf("OapiGenVersion is %q: a scaffolded service would generate from a moving target", OapiGenVersion)
 		}
 	}
 }
@@ -1559,7 +1559,7 @@ func TestThePinnedGeneratorAcceptsTheDirective(t *testing.T) {
 	if testing.Short() {
 		t.Skip("downloads the pinned generator")
 	}
-	argv := append(strings.Fields(testParams().ClientgenCommand()), "generate", "self", "--help")
+	argv := append(strings.Fields(testParams().OapiGenCommand()), "generate", "self", "--help")
 	out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("%s: %v\n%s", strings.Join(argv, " "), err, out)
@@ -1569,8 +1569,8 @@ func TestThePinnedGeneratorAcceptsTheDirective(t *testing.T) {
 	// exits 0. The flags are what tell the two apart.
 	for _, flag := range []string{"--ts-out", "--npm-package"} {
 		if !strings.Contains(string(out), flag) {
-			t.Errorf("oapi-clientgen %s has no %s: the scaffolded directive would fail",
-				ClientgenVersion, flag)
+			t.Errorf("oapi-gen %s has no %s: the scaffolded directive would fail",
+				OapiGenVersion, flag)
 		}
 	}
 }

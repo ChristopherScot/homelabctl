@@ -11,7 +11,7 @@ import (
 
 	"github.com/ChristopherScot/homelabctl/internal/config"
 	"github.com/ChristopherScot/homelabctl/internal/runtime"
-	"github.com/ChristopherScot/oapi-clientgen/apiclient"
+	"github.com/ChristopherScot/oapi-gen/apiclient"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

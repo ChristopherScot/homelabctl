@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"github.com/ChristopherScot/oapi-clientgen/apiclient"
+	"github.com/ChristopherScot/oapi-gen/apiclient"
 	"path"
 	"sort"
 	"strings"
@@ -114,7 +114,7 @@ func (e embedded) SpecFiles() []string {
 		}
 	}
 	// The generated client is deliberately absent. A service's own
-	// go:generate runs `oapi-clientgen generate self`, which derives
+	// go:generate runs `oapi-gen generate self`, which derives
 	// what the templates here cannot - which operations page, whether
 	// the spec declares a security scheme - and writes those files
 	// from it. Listing them here asks regen to render them a second
