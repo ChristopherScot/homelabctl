@@ -2505,13 +2505,21 @@ func TestNodeServiceClientBuildRecipeIsWrittenOnce(t *testing.T) {
 		t.Errorf("%s does not stop on a failed client build", clientBuildScript)
 	}
 
-	// A copy that drifted - to `npm install`, say - no longer matches the
-	// recipe, so it cannot be the marker for "restated elsewhere". Any
-	// copy has to enumerate the sibling clients, and nothing but the
-	// script has reason to.
-	const marker = "../*/clients/ts"
-	if !strings.Contains(script, marker) {
-		t.Fatalf("%s no longer enumerates clients with %q; this test needs a new marker", clientBuildScript, marker)
+	// The recipe's SHAPE, not one spelling of it: a loop over a path
+	// ending in clients/ts.
+	//
+	// Keying on the exact glob missed the copy that matters. A second
+	// copy is usually added by someone whose layout is deeper, so the
+	// glob is the first thing they change - ../*/*/clients/ts contains
+	// no "../*/clients/ts" and went unseen, sitting in the Dockerfile
+	// beside the script call with both tests green.
+	//
+	// The loop is what makes it a restatement rather than a mention:
+	// the Dockerfile names clients/ts in a comment and runs npm run
+	// build for the service itself, and neither iterates.
+	recipe := regexp.MustCompile(`for\s+\w+\s+in[^;\n]*clients/ts`)
+	if !recipe.MatchString(script) {
+		t.Fatalf("%s no longer loops over clients/ts; this test needs a new marker", clientBuildScript)
 	}
 	others := map[string]string{"Dockerfile": a.Dockerfile, "workflow": a.Workflow, "publish workflow": a.PublishWorkflow}
 	for _, f := range a.Files {
@@ -2520,7 +2528,7 @@ func TestNodeServiceClientBuildRecipeIsWrittenOnce(t *testing.T) {
 		}
 	}
 	for name, body := range others {
-		if strings.Contains(body, marker) {
+		if recipe.MatchString(body) {
 			t.Errorf("%s restates the client build recipe instead of running the script", name)
 		}
 	}

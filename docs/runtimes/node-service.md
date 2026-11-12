@@ -199,6 +199,19 @@ into the bundle, so no symlink reaches the running image. The client is
 built by `scripts/build-clients.sh`, which the Dockerfile and
 `make deps` both run.
 
+A service scaffolded before that script existed has to pull in all
+three files together:
+
+```sh
+homelabctl init <name> --overwrite Dockerfile,Makefile,scripts/build-clients.sh
+```
+
+`--overwrite Dockerfile` on its own rewrites the Dockerfile to run a
+script the service does not have, and the next image build stops with
+`sh: can't open 'scripts/build-clients.sh'`. `homelabctl regen` does
+not cover these files - a node-service renders none of them from the
+spec - so `--overwrite` is the only way they arrive.
+
 Two more things worth knowing. The consumer's workflow needs the API
 service in its `paths:` filter, or a spec change skips the job that
 would have caught it - and `vite build` does not typecheck, so the
