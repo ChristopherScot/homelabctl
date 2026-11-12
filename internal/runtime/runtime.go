@@ -79,8 +79,8 @@ type Params struct {
 }
 
 // HeyAPIVersion is the pinned @hey-api/openapi-ts the generated
-// client's package.json declares, from internal/codegen so it cannot
-// drift from the version the generate step actually runs.
+// client's package.json declares, read from oapi-gen's codegen package
+// so it cannot drift from the version the generate step actually runs.
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 
 // OapiGenVersion pins the oapi-gen a scaffolded service
@@ -92,8 +92,9 @@ func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 // gate turns red on the day oapi-gen publishes, in a file nobody
 // touched.
 //
-// Here rather than in internal/codegen because that package belongs to
-// oapi-gen and cannot name its own version.
+// Stated here rather than read from oapi-gen's codegen package the way
+// HeyAPIVersion is: that package is imported, and an imported module
+// cannot name the version it was imported at.
 const OapiGenVersion = "v0.1.0"
 
 func (p Params) OapiGenCommand() string {
@@ -144,8 +145,8 @@ func TSClientSpecPath() string {
 
 // HeyAPIConfig is the generated client's openapi-ts.config.ts.
 //
-// From internal/codegen, so a scaffolded service and a third-party
-// client cannot end up with different output layouts - the hand-written
+// From oapi-gen's codegen package, so a scaffolded service and a
+// third-party client cannot end up with different output layouts - the hand-written
 // files live above the directory hey-api clears, and that is only true
 // if both configs say so.
 //
