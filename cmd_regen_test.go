@@ -269,3 +269,56 @@ func TestRegenCheckSeesATemplateOwnedFileDrift(t *testing.T) {
 		t.Errorf("error = %v, want it to name files out of date", err)
 	}
 }
+
+// A read that fails for any reason other than "not there" is not
+// "nothing to sync".
+//
+// Both files were read with `if b, err := os.ReadFile(x); err == nil`
+// and no else, so a permission or I/O failure reported the same
+// nothing as a clean file - and --check then told the user everything
+// was up to date. The comment two blocks up records the last time a
+// silent read failure here shipped a wrong version to npm.
+//
+// A directory in the file's place rather than chmod 000: root ignores
+// the mode, so the chmod version would pass in a container and prove
+// nothing.
+func TestSyncVersionsRefusesAnUnreadableFile(t *testing.T) {
+	for _, c := range []struct{ name, path string }{
+		{"goClient", filepath.Join("api", "client.go")},
+		{"tsPackage", filepath.Join("clients", "ts", "package.json")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			for _, checkOnly := range []bool{false, true} {
+				dir := regenFixture(t, "1.2.3", "1.2.3", "1.2.3")
+				full := filepath.Join(dir, c.path)
+				if err := os.Remove(full); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(full, 0o755); err != nil {
+					t.Fatal(err)
+				}
+
+				if _, err := syncVersions(dir, "1.2.3", checkOnly); err == nil {
+					t.Errorf("checkOnly=%v: an unreadable %s was reported as nothing to sync", checkOnly, c.path)
+				}
+			}
+		})
+	}
+}
+
+// A file that is genuinely absent is still not an error: a service
+// with no spec has no generated client to keep in step.
+func TestSyncVersionsIgnoresAMissingFile(t *testing.T) {
+	for _, path := range []string{
+		filepath.Join("api", "client.go"),
+		filepath.Join("clients", "ts", "package.json"),
+	} {
+		dir := regenFixture(t, "1.2.3", "1.2.3", "1.2.3")
+		if err := os.Remove(filepath.Join(dir, path)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := syncVersions(dir, "1.2.3", true); err != nil {
+			t.Errorf("a missing %s was an error: %v", path, err)
+		}
+	}
+}
