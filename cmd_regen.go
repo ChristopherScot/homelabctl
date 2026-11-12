@@ -235,7 +235,21 @@ func syncVersions(dir, version string, checkOnly bool) ([]string, error) {
 	var stale []string
 
 	goClient := filepath.Join(dir, "api", "client.go")
-	if b, err := os.ReadFile(goClient); err == nil {
+	b, err := os.ReadFile(goClient)
+	// A file that is not there is not an error: a service without a
+	// spec has no generated client to sync. Anything else - a
+	// permission, an I/O failure, a directory where the file should
+	// be - is not "nothing to sync" and must not pass for it.
+	//
+	// Note what does NOT catch a missing api/client.go: the service's
+	// own go:generate writes it, so SpecFiles leaves it out
+	// deliberately (embedded.go, issue #66) and regen --check's render
+	// comparison never looks. CI's regen plus `git diff --exit-code`
+	// is what covers that.
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err == nil { // if NO error: the file is there and was read
 		want := goClientVersion.ReplaceAll(b, []byte("${1}"+version+"${2}"))
 		if string(want) != string(b) {
 			stale = append(stale, "api/client.go")
@@ -254,8 +268,15 @@ func syncVersions(dir, version string, checkOnly bool) ([]string, error) {
 	// with, regardless of what the spec said.
 	pkgRel := filepath.Join("clients", "ts", "package.json")
 	pkgPath := filepath.Join(dir, pkgRel)
-	if b, err := os.ReadFile(pkgPath); err == nil {
-		updated, changed, err := setPackageVersion(b, version)
+	pkg, err := os.ReadFile(pkgPath)
+	// Same split as api/client.go, with one difference worth knowing:
+	// this file IS in SpecFiles, so a missing one is reported out of
+	// date by the render comparison rather than going unnoticed.
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err == nil { // if NO error
+		updated, changed, err := setPackageVersion(pkg, version)
 		if err != nil {
 			return nil, err
 		}
