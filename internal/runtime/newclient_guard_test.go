@@ -12,8 +12,8 @@ import (
 // api.NewClient is ogen's constructor: http.DefaultClient, no timeout,
 // no retries. api.New installs all of it. Three of three consumers
 // called the wrong one (#28), so every Go runtime's `make test` greps
-// for it - and this runs that Makefile rather than reading it, with
-// `go` stubbed out so only the grep can fail.
+// for it outside _test.go - and this runs that Makefile rather than
+// reading it, with `go` stubbed out so only the grep can fail.
 func TestGoMakefileTestRefusesOgensConstructor(t *testing.T) {
 	if _, err := exec.LookPath("make"); err != nil {
 		t.Skipf("make unavailable: %v", err)
@@ -66,6 +66,41 @@ func main() { c, _ := api.NewClient(url) }
 			}
 			if !strings.Contains(out, "Call api.New(") {
 				t.Errorf("the failure does not say to call api.New:\n%s", out)
+			}
+
+			// A test calling the bare constructor is deliberate: it
+			// wants no retries and no breaker against an httptest
+			// server. The guard exempts _test.go, so the offending
+			// main.go must be the only reason the run above failed -
+			// put the same call in a test file and the run goes green
+			// again.
+			writeFile(t, filepath.Join(dir, "main.go"), `package main
+
+func main() {}
+`)
+			writeFile(t, filepath.Join(dir, "client_test.go"), `package main
+
+func TestIt(t *testing.T) { c, _ := api.NewClient(srv.URL) }
+`)
+			if out, err := makeTest(t, dir, nil); err != nil {
+				t.Fatalf("make test refused api.NewClient in a _test.go file:\n%s", out)
+			}
+
+			// The exemption is for the suffix, not the substring: a
+			// file merely containing "test" in its name still ships.
+			writeFile(t, filepath.Join(dir, "testhelpers.go"), `package main
+
+func helper() { c, _ := api.NewClient(url) }
+`)
+			out, err = makeTest(t, dir, nil)
+			if err == nil {
+				t.Fatalf("make test passed a call in testhelpers.go, which is not a test file:\n%s", out)
+			}
+			if !strings.Contains(out, "testhelpers.go") {
+				t.Errorf("the failure does not name the offending file:\n%s", out)
+			}
+			if err := os.Remove(filepath.Join(dir, "testhelpers.go")); err != nil {
+				t.Fatal(err)
 			}
 
 			// A grep that could not run found nothing, which is not

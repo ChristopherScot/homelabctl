@@ -161,6 +161,11 @@ the above. If your service was scaffolded by homelabctl, its `make test`
 fails on any mention of `api.NewClient(` in a `.go` file outside a
 directory named `api`.
 
+`_test.go` is exempt. A test usually wants the opposite of what `api.New`
+installs - no retries, so asserting "one request arrived" counts one, and
+no breaker state carried from the case before - so against an `httptest`
+server the bare constructor is the right call.
+
 ### Testing a service that calls this one
 
 `WithTransport` replaces the network, under the retries, so a test can
