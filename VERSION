@@ -1,5 +1,7 @@
-v1.21.8
+v1.21.10
 
+v1.21.10 a scaffolded TUI gets the CLI's self-updater, including the go-install fallback
+v1.21.9 a scaffolded Go `make test` refuses ogen's api.NewClient outside tests
 v1.21.8 services generate with oapi-gen: new module path, and an operation pages only if its spec says so
 v1.21.7 regen retires generated test files it no longer writes, and leaves yours alone
 v1.21.6 generated clients carry their spec's constraints in the doc comment
