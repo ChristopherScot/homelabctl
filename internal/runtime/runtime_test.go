@@ -2485,13 +2485,7 @@ func TestNodeServiceClientBuildRecipeIsWrittenOnce(t *testing.T) {
 	// The one pin on the recipe itself: npm ci, since `npm install` is
 	// the drift that happened and rewrites the client's lockfile. Comment
 	// lines are skipped: the script is allowed to say what it avoids.
-	var code []string
-	for _, l := range strings.Split(script, "\n") {
-		if !strings.HasPrefix(strings.TrimSpace(l), "#") {
-			code = append(code, l)
-		}
-	}
-	commands := strings.Join(code, "\n")
+	commands := stripComments(script)
 	if !strings.Contains(commands, "npm ci") || strings.Contains(commands, "npm install") {
 		t.Errorf("%s installs the client with something other than npm ci", clientBuildScript)
 	}
@@ -2516,8 +2510,18 @@ func TestNodeServiceClientBuildRecipeIsWrittenOnce(t *testing.T) {
 	// names clients/ts in a comment and runs npm run build for the
 	// service itself; neither installs a client first, so neither
 	// matches.
-	recipe := regexp.MustCompile(`npm ci[^\n]*\n(?:[^\n]*\n)??[^\n]*npm run build`)
-	if !recipe.MatchString(script) {
+	// The recipe is: change into a client, install it, build it. The
+	// cd is what separates it from the service installing and building
+	// ITSELF, which the Dockerfile legitimately does with `RUN npm ci`
+	// and `RUN npm run build` five lines apart - a marker keyed on the
+	// two npm commands alone called that a restatement.
+	//
+	// Matched against the comment-stripped body. An earlier version of
+	// this marker ran against the raw script and matched the prose
+	// above the recipe, so a comment satisfied the invariant and the
+	// fatal below could not fire.
+	recipe := regexp.MustCompile(`cd [^\n]*npm ci[^\n]*npm run build`)
+	if !recipe.MatchString(commands) {
 		t.Fatalf("%s no longer installs a client and builds it; this test needs a new marker", clientBuildScript)
 	}
 	others := map[string]string{"Dockerfile": a.Dockerfile, "workflow": a.Workflow, "publish workflow": a.PublishWorkflow}
@@ -2527,10 +2531,27 @@ func TestNodeServiceClientBuildRecipeIsWrittenOnce(t *testing.T) {
 		}
 	}
 	for name, body := range others {
-		if recipe.MatchString(body) {
+		if recipe.MatchString(stripComments(body)) {
 			t.Errorf("%s restates the client build recipe instead of running the script", name)
 		}
 	}
+}
+
+// stripComments drops whole-line # comments, so an assertion about what
+// a file DOES is not satisfied by a file saying what it avoids. Both
+// halves of the recipe check need it: the script explains npm ci and
+// npm run build in prose directly above running them.
+//
+// Not a shell parser - a trailing comment after a command stays, which
+// is what we want, since the command is still there.
+func stripComments(body string) string {
+	var code []string
+	for _, l := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "#") {
+			code = append(code, l)
+		}
+	}
+	return strings.Join(code, "\n")
 }
 
 // clientBuildScript is where a node service keeps the one copy of how a

@@ -80,8 +80,10 @@ func TestNodeServiceBuildsOnlyDeclaredClients(t *testing.T) {
 					t.Fatal(err)
 				}
 				owner := filepath.Base(filepath.Dir(filepath.Dir(dir)))
+				// A generated client has a build script; that is how
+				// the script tells one from any other local package.
 				writeFile(t, filepath.Join(dir, "package.json"),
-					`{"name":"`+owner+`-client","version":"1.0.0"}`)
+					`{"name":"`+owner+`-client","version":"1.0.0","scripts":{"build":"tsc"}}`)
 			}
 
 			svc := filepath.Join(root, tc.service)
@@ -185,5 +187,57 @@ func TestNodeServiceRefusesAFileDependencyThatIsNotThere(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "../nope/clients/ts") {
 		t.Errorf("the failure does not name the missing path:\n%s", out)
+	}
+}
+
+// A local package that is not a generated client is left alone.
+//
+// The list comes from file: dependencies, and not every one of those
+// is a client - a shared utils package is a local package too. It has
+// no build script, so running the client recipe on it fails on a
+// script that is not there, with an error about the client build. The
+// glob could not have this problem: it selected on the path. Skipping
+// by "has no build script" keeps the loud failure for a path that is
+// genuinely missing.
+func TestNodeServiceSkipsALocalPackageThatIsNotAClient(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("sh unavailable: %v", err)
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skipf("node unavailable: %v", err)
+	}
+
+	root := t.TempDir()
+	// A local package with no build script, beside one with one.
+	writeFile(t, filepath.Join(root, "util", "package.json"),
+		`{"name":"@o/util","version":"1.0.0","main":"index.js"}`)
+	writeFile(t, filepath.Join(root, "api", "clients", "ts", "package.json"),
+		`{"name":"@o/api-client","version":"1.0.0","scripts":{"build":"tsc"}}`)
+
+	svc := filepath.Join(root, "web")
+	writeFile(t, filepath.Join(svc, "scripts", "build-clients.sh"),
+		fileBody(t, nodeServiceArtifacts(t), clientBuildScript))
+	writeFile(t, filepath.Join(svc, "package.json"),
+		`{"name":"svc","version":"0.1.0","dependencies":{`+
+			`"@o/util":"file:../util",`+
+			`"@o/api-client":"file:../api/clients/ts"}}`)
+
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "npm"), []byte("#!/bin/sh\necho RAN \"$PWD\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("sh", "scripts/build-clients.sh")
+	cmd.Dir = svc
+	cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build-clients.sh failed on a local package that is not a client: %v\n%s", err, out)
+	}
+	if strings.Contains(string(out), filepath.Join(root, "util")) {
+		t.Errorf("ran npm in a local package with no build script:\n%s", out)
+	}
+	if !strings.Contains(string(out), filepath.Join("api", "clients", "ts")) {
+		t.Errorf("did not build the client declared beside it:\n%s", out)
 	}
 }

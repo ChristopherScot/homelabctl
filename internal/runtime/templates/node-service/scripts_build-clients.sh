@@ -45,10 +45,13 @@ clients=$(node -e '
 [ -n "$clients" ] || exit 0
 
 # Word-split on newlines only, so a path with spaces survives. A for
-# loop rather than `… | while read`, because the pipeline would put the
-# body in a subshell and a failure there reaches this script only
-# through set -e - the kind of indirection that let the old loop report
-# success after a client failed to build.
+# loop rather than `… | while read`: the pipeline would run the body in
+# a subshell, so anything it set would not outlive the loop. Both
+# shapes propagate a failing client under set -e; this one just has
+# nothing to explain.
+#
+# IFS stays changed for the rest of the script, which is this loop and
+# nothing after it. Anything appended below needs it restored first.
 IFS='
 '
 for c in $clients; do
@@ -59,7 +62,14 @@ for c in $clients; do
     echo "build-clients: $c is declared as a file: dependency but has no package.json" >&2
     exit 1
   fi
-  # npm ci, not npm install: the client ships a committed
-  # package-lock.json, and npm install is free to rewrite it.
+  # A local package with no build script is not a generated client -
+  # a shared utils package, say. npm links it and there is nothing to
+  # compile, so building it would fail on a script that is not there.
+  if ! node -e 'process.exit(require(require("path").resolve(process.argv[1], "package.json")).scripts?.build ? 0 : 1)' "$c"; then
+    continue
+  fi
+  # npm ci for the CLIENT, not npm install: it ships a committed
+  # package-lock.json and npm install is free to rewrite it. The
+  # service's own install is npm install, in the Makefile.
   ( cd "$c" && npm ci --no-audit --no-fund && npm run build )
 done
