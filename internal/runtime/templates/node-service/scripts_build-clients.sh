@@ -26,7 +26,7 @@ cd "$(dirname "$0")/.."
 # it twice is pure cost.
 own=
 if [ -d ./clients/ts ]; then
-  own=$(cd ./clients/ts && pwd)
+  own=$(cd -P ./clients/ts && pwd)
 fi
 
 for c in ./clients/ts ../*/clients/ts; do
@@ -34,9 +34,10 @@ for c in ./clients/ts ../*/clients/ts; do
   # nothing: an unmatched glob stays literal in POSIX sh, and this
   # guard rejects it.
   [ -f "$c/package.json" ] || continue
-  # Skip the second sighting of our own client. Compared by resolved
-  # path rather than by name, because the two spellings differ.
-  [ "$c" = ./clients/ts ] || [ "$(cd "$c" && pwd)" != "$own" ] || continue
+  # Skip the second sighting of our own client. -P resolves symlinks,
+  # so a sibling that is a link to this service is caught too; plain
+  # cd is logical and would keep the link's own spelling.
+  [ "$c" = ./clients/ts ] || [ "$(cd -P "$c" && pwd)" != "$own" ] || continue
   # npm ci, not npm install: the client ships a committed
   # package-lock.json, and npm install is free to rewrite it.
   #

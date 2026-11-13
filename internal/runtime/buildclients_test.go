@@ -85,8 +85,14 @@ func TestNodeServiceBuildsEachClientOnce(t *testing.T) {
 				t.Fatalf("build-clients.sh failed: %v\n%s", err, out)
 			}
 
-			// npm is called twice per client (ci, then run build), so
-			// count distinct directories and how often each appears.
+			// The script runs npm twice per client - ci, then run
+			// build - so a client built exactly once accounts for
+			// exactly two invocations. Asserting that number rather
+			// than a range is what catches a half-build: one npm call
+			// means the install ran and the compile did not, which
+			// leaves a client whose dist/ never appears and which the
+			// consumer then reports as missing entirely.
+			const perClient = 2
 			seen := map[string]int{}
 			for _, l := range strings.Split(string(out), "\n") {
 				dir, ok := strings.CutPrefix(l, "RAN ")
@@ -98,12 +104,9 @@ func TestNodeServiceBuildsEachClientOnce(t *testing.T) {
 			}
 
 			for _, w := range tc.want {
-				switch n := seen[w]; {
-				case n == 0:
-					t.Errorf("%s's client was never built:\n%s", w, out)
-				case n > 2:
-					t.Errorf("%s's client was built %d times, want once (npm runs twice per build: ci, then run build):\n%s",
-						w, n/2, out)
+				if n := seen[w]; n != perClient {
+					t.Errorf("npm ran %d times in %s's client, want %d (ci, then run build):\n%s",
+						n, w, perClient, out)
 				}
 				delete(seen, w)
 			}
