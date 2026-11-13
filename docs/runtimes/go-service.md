@@ -159,16 +159,25 @@ timeouts, retries and giving up on a service that is down.
 ```go
 import "github.com/owner/myservice/api"
 
-c, _ := api.NewClient(url, api.WithClient(api.NewHTTPClient(api.HTTPOptions{
-    Name: "my-caller",   // shows up in your service's logs
-})))
+c, err := api.New(url, "my-caller")
 thing, err := c.GetThing(ctx, api.GetThingParams{ID: "abc"})
 ```
 
-`HTTPOptions` carries the defaults — a 5 second timeout and one retry —
-so even an empty one is doing work. Setting `Name` is worth the extra
-line: your service logs it on every request, so you can tell who is
-calling. A caller that leaves it out is logged as `unknown`.
+The second argument is the CALLER's own name, not the name of the
+service being called. It goes out as `Client-Name`, so whoever operates
+your service can tell who is calling.
+
+`New` with no options installs a per-attempt timeout, one retry on
+idempotent methods, a bounded `Retry-After`, and no circuit breaker.
+Options including `WithPolicy`, `WithBreaker`, `WithTimeout` and
+`WithTransport` change that. The scaffolded service's own README has the
+current figures and a worked example of each; they are the generator's
+defaults, so this guide does not restate them.
+
+Not `api.NewClient`: that is ogen's constructor and installs none of it.
+A scaffolded service's `make test` fails on any mention of
+`api.NewClient(` in a `.go` file outside `_test.go` and outside a
+directory named `api`.
 
 They install it with `go get github.com/owner/myservice@v0.2.0`.
 
