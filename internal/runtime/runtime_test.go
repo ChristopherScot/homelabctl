@@ -2433,23 +2433,22 @@ func TestReleaseGateFailsClosedOnAnErrorItCannotClassify(t *testing.T) {
 // devDependencies installed changed between npm 11.19.0 and 11.19.1 -
 // the first built it, the second failed with "tsc: not found".
 func TestNodeServiceBuildsASiblingClient(t *testing.T) {
-	r, err := Get("node-service")
-	if err != nil {
-		t.Fatal(err)
-	}
-	dockerfile := r.Artifacts(Params{Name: "web", Module: "github.com/o/r/services/web", Spec: true}).Dockerfile
-	if dockerfile == "" {
+	a := nodeServiceArtifacts(t)
+	if a.Dockerfile == "" {
 		t.Fatal("node-service has no Dockerfile")
 	}
-	// The RUN line, not any mention of the path: a comment names
-	// `file:../<api>/clients/ts` too, and asserting on the bare path
-	// passes with the build step deleted.
-	build := "for c in ./clients/ts ../*/clients/ts"
-	if !strings.Contains(dockerfile, build) {
-		t.Error("the Dockerfile does not build a sibling generated client before npm ci")
+	// The RUN line, not the bare path: the path still appears if the
+	// step is commented out.
+	run := "RUN " + clientBuildCmd
+	if !strings.Contains(a.Dockerfile, run) {
+		t.Errorf("the Dockerfile has no %q line; nothing builds a sibling generated client", run)
 	}
 	// Before `npm ci`, or the install resolves main into an empty dist.
-	if strings.Index(dockerfile, build) > strings.Index(dockerfile, "RUN npm ci") {
+	install := strings.Index(a.Dockerfile, "RUN npm ci")
+	if install < 0 {
+		t.Fatal("the Dockerfile does not run npm ci")
+	}
+	if strings.Index(a.Dockerfile, run) > install {
 		t.Error("the client is built after npm ci, which is too late")
 	}
 }
@@ -2458,23 +2457,10 @@ func TestNodeServiceBuildsASiblingClient(t *testing.T) {
 // client: `make test` runs tsc, and without dist/ it reports the
 // package as missing entirely rather than unbuilt.
 func TestNodeServiceMakefileBuildsASiblingClient(t *testing.T) {
-	r, err := Get("node-service")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var makefile string
-	for _, f := range r.Artifacts(Params{Name: "web", Module: "github.com/o/r/services/web", Spec: true}).Files {
-		if f.Path == "Makefile" {
-			makefile = f.Body
-		}
-	}
-	if makefile == "" {
-		t.Fatal("node-service has no Makefile")
-	}
-
-	build := "for c in ./clients/ts ../*/clients/ts"
-	if !strings.Contains(makefile, build) {
-		t.Error("the Makefile does not build a sibling generated client")
+	makefile := fileBody(t, nodeServiceArtifacts(t), "Makefile")
+	// A recipe line, with or without make's @ silencer.
+	if !strings.Contains(makefile, "\n\t@"+clientBuildCmd+"\n") && !strings.Contains(makefile, "\n\t"+clientBuildCmd+"\n") {
+		t.Errorf("the Makefile has no %q recipe line; nothing builds a sibling generated client", clientBuildCmd)
 	}
 
 	// A prerequisite of deps, not of node_modules. CI runs `npm ci`
@@ -2485,6 +2471,101 @@ func TestNodeServiceMakefileBuildsASiblingClient(t *testing.T) {
 		t.Error("client is not a prerequisite of deps; a pre-installed " +
 			"node_modules will skip it, which is what CI does")
 	}
+}
+
+// How a generated client is built is written once, in a script the
+// Dockerfile and the Makefile both run. It used to be written in each,
+// and the Makefile copy said `npm install` within one commit of being
+// copied from the Dockerfile's `npm ci` - which rewrites the client's
+// committed lockfile. Two copies of one fact drift; this holds it to one.
+func TestNodeServiceClientBuildRecipeIsWrittenOnce(t *testing.T) {
+	a := nodeServiceArtifacts(t)
+
+	script := fileBody(t, a, clientBuildScript)
+	// The one pin on the recipe itself: npm ci, since `npm install` is
+	// the drift that happened and rewrites the client's lockfile. Comment
+	// lines are skipped: the script is allowed to say what it avoids.
+	var code []string
+	for _, l := range strings.Split(script, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "#") {
+			code = append(code, l)
+		}
+	}
+	commands := strings.Join(code, "\n")
+	if !strings.Contains(commands, "npm ci") || strings.Contains(commands, "npm install") {
+		t.Errorf("%s installs the client with something other than npm ci", clientBuildScript)
+	}
+	if !strings.Contains(script, "npm run build") {
+		t.Errorf("%s does not build the client", clientBuildScript)
+	}
+	// `set -e` is what stops the loop at a failed client; the script
+	// says why. Anchored to a line start: a comment in the script names
+	// the flag too.
+	if !strings.Contains(script, "\nset -e") {
+		t.Errorf("%s does not stop on a failed client build", clientBuildScript)
+	}
+
+	// The recipe's SHAPE, not one spelling of it: a loop over a path
+	// ending in clients/ts.
+	//
+	// Keying on the exact glob missed the copy that matters. A second
+	// copy is usually added by someone whose layout is deeper, so the
+	// glob is the first thing they change - ../*/*/clients/ts contains
+	// no "../*/clients/ts" and went unseen, sitting in the Dockerfile
+	// beside the script call with both tests green.
+	//
+	// The loop is what makes it a restatement rather than a mention:
+	// the Dockerfile names clients/ts in a comment and runs npm run
+	// build for the service itself, and neither iterates.
+	recipe := regexp.MustCompile(`for\s+\w+\s+in[^;\n]*clients/ts`)
+	if !recipe.MatchString(script) {
+		t.Fatalf("%s no longer loops over clients/ts; this test needs a new marker", clientBuildScript)
+	}
+	others := map[string]string{"Dockerfile": a.Dockerfile, "workflow": a.Workflow, "publish workflow": a.PublishWorkflow}
+	for _, f := range a.Files {
+		if f.Path != clientBuildScript {
+			others[f.Path] = f.Body
+		}
+	}
+	for name, body := range others {
+		if recipe.MatchString(body) {
+			t.Errorf("%s restates the client build recipe instead of running the script", name)
+		}
+	}
+}
+
+// clientBuildScript is where a node service keeps the one copy of how a
+// generated client is built, and clientBuildCmd is how its Dockerfile
+// and Makefile run it: via sh, since there is no exec bit (see writeFile
+// in cmd_init.go).
+const (
+	clientBuildScript = "scripts/build-clients.sh"
+	clientBuildCmd    = "sh " + clientBuildScript
+)
+
+// nodeServiceArtifacts renders a spec-first node service, so there is a
+// generated client to build. The layout does not matter to the tests
+// that use it: the Dockerfile, Makefile and script are the same either way.
+func nodeServiceArtifacts(t *testing.T) Artifacts {
+	t.Helper()
+	r, err := Get("node-service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r.Artifacts(testParams())
+}
+
+// fileBody is the rendered file at path, or a fatal: a missing file is
+// never what a test about its contents means to check.
+func fileBody(t *testing.T, a Artifacts, path string) string {
+	t.Helper()
+	for _, f := range a.Files {
+		if f.Path == path {
+			return f.Body
+		}
+	}
+	t.Fatalf("no rendered %q", path)
+	return ""
 }
 
 // clientFiles hardcodes HasSecurity: false, which is only correct
