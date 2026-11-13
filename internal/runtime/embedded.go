@@ -143,8 +143,30 @@ func (e embedded) swap(src string, p Params) string {
 	return src
 }
 
+// templatePath is where a name in a runtime's files map lives: this
+// runtime's directory, or - when the name contains a slash - another
+// runtime's, as "go-cli/update.go.tmpl".
+//
+// That escape hatch exists for update.go.tmpl, which go-cli and go-tui
+// shipped as byte-identical copies: the generated output was fine
+// because both render the same thing, but a fix to the self-updater
+// had to be made twice and could be made once. A name that says where
+// the file comes from beats a shared/ directory that hides which
+// runtime owns it.
+//
+// Borrowing a template borrows what it expects of its neighbours:
+// go-cli's update.go calls version(), so go-tui's main.go defines one
+// too. A scaffold that does not compile is how that shows up.
+func (e embedded) templatePath(name string) string {
+	dir := e.dir
+	if i := strings.Index(name, "/"); i >= 0 {
+		dir, name = name[:i], name[i+1:]
+	}
+	return path.Join("templates", dir, name)
+}
+
 func (e embedded) read(name string) string {
-	b, err := templates.ReadFile(path.Join("templates", e.dir, name))
+	b, err := templates.ReadFile(e.templatePath(name))
 	if err != nil {
 		// Only reachable if a template is missing from the binary, which
 		// is a build-time mistake rather than a runtime condition.
@@ -156,7 +178,7 @@ func (e embedded) read(name string) string {
 // readIfPresent is read for a template only some runtimes ship, so a
 // runtime without one is a fact rather than a panic.
 func (e embedded) readIfPresent(name string) string {
-	b, err := templates.ReadFile(path.Join("templates", e.dir, name))
+	b, err := templates.ReadFile(e.templatePath(name))
 	if err != nil {
 		return ""
 	}

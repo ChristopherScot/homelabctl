@@ -1,7 +1,11 @@
 package runtime
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -2497,4 +2501,112 @@ func TestScaffoldedSpecHasNoSecuritySchemes(t *testing.T) {
 		t.Error("the scaffolded spec now declares securitySchemes; " +
 			"clientFiles must compute HasSecurity from the spec rather than hardcoding false")
 	}
+}
+
+// A borrowed template brings its expectations with it.
+//
+// go-tui renders go-cli's update.go rather than keeping a copy of it
+// (issue #9), and that template calls version(). go-tui's main.go did
+// not define one, so the scaffolded TUI did not compile - `undefined:
+// version` - while every test here stayed green, because nothing
+// rendered a runtime's Go files and looked at them together.
+//
+// This parses them as one package and checks that every function the
+// scaffold calls is defined somewhere in it. Parsing is not type
+// checking: it cannot see into the dependencies, so it only judges
+// calls to plain identifiers, which is exactly where a borrowed
+// template's assumptions land.
+func TestEveryRuntimeDefinesWhatItsTemplatesCall(t *testing.T) {
+	for _, name := range Names() {
+		t.Run(name, func(t *testing.T) {
+			r, err := Get(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			fset := token.NewFileSet()
+			defined := map[string]bool{}
+			var files []*ast.File
+			for _, f := range r.Artifacts(testParams()).Files {
+				// api/ holds a generated client whose other half -
+				// the ogen output its own go:generate writes - is not
+				// rendered here, so its calls resolve to files this
+				// test never sees.
+				if filepath.Ext(f.Path) != ".go" || strings.HasPrefix(f.Path, "api/") {
+					continue
+				}
+				parsed, err := parser.ParseFile(fset, f.Path, f.Body, 0)
+				if err != nil {
+					t.Fatalf("%s does not parse: %v", f.Path, err)
+				}
+				files = append(files, parsed)
+				for _, d := range parsed.Decls {
+					if fn, ok := d.(*ast.FuncDecl); ok && fn.Recv == nil {
+						defined[fn.Name.Name] = true
+					}
+				}
+			}
+			if len(files) == 0 {
+				t.Skip("no Go files")
+			}
+
+			for _, f := range files {
+				// Locals and parameters shadow package functions, so
+				// collect the names this file binds and skip those.
+				local := map[string]bool{}
+				ast.Inspect(f, func(n ast.Node) bool {
+					switch v := n.(type) {
+					case *ast.AssignStmt:
+						for _, lhs := range v.Lhs {
+							if id, ok := lhs.(*ast.Ident); ok {
+								local[id.Name] = true
+							}
+						}
+					case *ast.Field:
+						for _, id := range v.Names {
+							local[id.Name] = true
+						}
+					case *ast.ValueSpec:
+						for _, id := range v.Names {
+							local[id.Name] = true
+						}
+					}
+					return true
+				})
+
+				ast.Inspect(f, func(n ast.Node) bool {
+					call, ok := n.(*ast.CallExpr)
+					if !ok {
+						return true
+					}
+					id, ok := call.Fun.(*ast.Ident)
+					if !ok {
+						// A selector: pkg.Fn or x.Method. Out of reach.
+						return true
+					}
+					if defined[id.Name] || local[id.Name] || universe[id.Name] {
+						return true
+					}
+					t.Errorf("%s calls %s(), which no file in the scaffold defines",
+						fset.Position(id.Pos()), id.Name)
+					return true
+				})
+			}
+		})
+	}
+}
+
+// universe is the predeclared functions, which no scaffold defines.
+var universe = map[string]bool{
+	"append": true, "cap": true, "clear": true, "close": true,
+	"complex": true, "copy": true, "delete": true, "imag": true,
+	"len": true, "make": true, "max": true, "min": true, "new": true,
+	"panic": true, "print": true, "println": true, "real": true,
+	"recover": true,
+	// Conversions to predeclared types parse as calls.
+	"bool": true, "byte": true, "complex64": true, "complex128": true,
+	"error": true, "float32": true, "float64": true, "int": true,
+	"int8": true, "int16": true, "int32": true, "int64": true,
+	"rune": true, "string": true, "uint": true, "uint8": true,
+	"uint16": true, "uint32": true, "uint64": true, "uintptr": true, "any": true,
 }
