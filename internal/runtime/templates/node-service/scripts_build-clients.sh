@@ -20,11 +20,23 @@ set -eu
 # The globs below are relative to the service, wherever this is run from.
 cd "$(dirname "$0")/.."
 
+# The service's own client, resolved, so the sibling glob below can
+# recognise it. In both layouts ../*/clients/ts also matches this
+# service's own directory - as ../<service>/clients/ts - and building
+# it twice is pure cost.
+own=
+if [ -d ./clients/ts ]; then
+  own=$(cd ./clients/ts && pwd)
+fi
+
 for c in ./clients/ts ../*/clients/ts; do
   # A service that consumes no client matches neither glob and does
   # nothing: an unmatched glob stays literal in POSIX sh, and this
   # guard rejects it.
   [ -f "$c/package.json" ] || continue
+  # Skip the second sighting of our own client. Compared by resolved
+  # path rather than by name, because the two spellings differ.
+  [ "$c" = ./clients/ts ] || [ "$(cd "$c" && pwd)" != "$own" ] || continue
   # npm ci, not npm install: the client ships a committed
   # package-lock.json, and npm install is free to rewrite it.
   #
