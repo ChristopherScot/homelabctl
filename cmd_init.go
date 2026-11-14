@@ -245,7 +245,6 @@ func runInit(o initOpts) error {
 	}
 	printNext(o, c, target, arts)
 	if tidyErr != nil {
-		fmt.Println()
 		unresolvedWarning(os.Stderr, r, target, tidyErr)
 	}
 	return nil
@@ -260,13 +259,21 @@ func runInit(o initOpts) error {
 // command that does nothing for it, and running the suggestion left
 // the tree exactly as broken. go-service locks in two languages, so
 // every command is printed, not the first.
+// cause is printed whole rather than unwrapped: it arrives as a
+// two-verb %w wrap, on which errors.Unwrap returns nil anyway, and the
+// sentinel prefix reads fine inline.
+//
+// The leading blank line is written here too, so the whole message
+// reaches one stream. It used to be a bare fmt.Println() at the call
+// site, which put the separator on stdout and the warning on stderr -
+// redirect stderr and the blank line stayed on the terminal while the
+// warning arrived unseparated.
 func unresolvedWarning(w io.Writer, r runtime.Runtime, dir string, cause error) {
+	fmt.Fprintln(w)
 	fmt.Fprintf(w, "WARNING: dependencies did not resolve, so this tree will not build yet.\n")
 	for _, cmd := range r.Lock() {
 		fmt.Fprintf(w, "  cd %s && %s\n", dir, strings.Join(cmd, " "))
 	}
-	// cause itself: errors.Unwrap on a two-verb %w wrap returns nil,
-	// and the sentinel prefix reads fine inline.
 	fmt.Fprintf(w, "  (%v)\n", cause)
 }
 

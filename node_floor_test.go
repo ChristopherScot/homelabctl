@@ -51,11 +51,13 @@ func TestDocsAskForTheNodeTheScaffoldEnforces(t *testing.T) {
 		}
 		body := string(b)
 
-		// "Node.js 24+" in the install table, "**Node 24 or newer**"
-		// in the prose - which wraps across a line, so anything after
-		// the number is not matched on. Every "Node <n>" a reader
-		// could act on has to name the floor.
-		asks := regexp.MustCompile(`Node(?:\.js)? (\d+)`).FindAllStringSubmatch(body, -1)
+		// Two spellings, both of which a reader acts on:
+		// "| [Node.js 24+](...)" in the install table, and
+		// "Node must be **version 24 or newer**" in the prose. A
+		// pattern anchored tight to "Node <n>" matched only the
+		// first, so reverting the prose line alone - the very line
+		// this test was written for - left it green.
+		asks := regexp.MustCompile(`Node[^0-9\n]{0,24}?(\d+)`).FindAllStringSubmatch(body, -1)
 		if asks == nil {
 			t.Errorf("%s names no Node version; the scaffold needs >=%s", doc, floor)
 			continue
@@ -86,14 +88,22 @@ func TestTheUnresolvedHintNamesTheRuntimesOwnLockCommand(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Asserted rather than skipped. A runtime with no lock
+		// command still gets the "will not build yet" header and the
+		// cause, with no remediation between them - worse than the
+		// wrong command this test exists to prevent. Every runtime
+		// declares one today, so this holds the line.
 		lock := r.Lock()
 		if len(lock) == 0 {
-			continue // nothing to suggest, and init prints nothing
+			t.Errorf("%s declares no Lock(), so the warning would name no way to fix it", name)
+			continue
 		}
 		t.Run(name, func(t *testing.T) {
-			// The real function init calls, not a rebuild of it:
-			// a test that assembles the hint itself passes no matter
-			// what cmd_init prints.
+			// The function init calls, not a rebuild of it: a test
+			// that assembles the hint itself passes no matter what
+			// unresolvedWarning prints. It does not cover the call
+			// site - inlining this back into runInit would leave
+			// this green.
 			var buf strings.Builder
 			unresolvedWarning(&buf, r, ".", errors.New("boom"))
 			got := buf.String()
