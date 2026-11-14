@@ -2719,23 +2719,28 @@ var universe = map[string]bool{
 // disagree with the production predicate.
 var versionRE = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
 
-// OapiGenVersion and go.mod's require line name the same version.
+// OapiGenVersion and go.mod's require line name the same version,
+// always. A bump moves both or it is not finished.
 //
-// They are two facts, not one - go.mod says what this tool compiles
-// against, the const says what a scaffolded service should `go run` -
-// and under a `replace` they deliberately differ. But they are kept
-// in step on purpose, and nothing related them: miss go.mod and this
-// tool builds against an older library than it tells services to use;
-// miss the const and every scaffolded service generates with the
-// PREVIOUS generator while this repo's tests stay green, because
+// They answer different questions - go.mod says what this tool
+// compiles against, the const says what a scaffolded service should
+// `go run` - but the answers are not allowed to differ, so this
+// asserts equality rather than some weaker relation. A `replace`
+// changes what is on disk and leaves the require line alone, so it
+// does not make these two disagree.
+//
+// Nothing else relates them: miss go.mod and this tool builds against
+// an older library than it tells services to use; miss the const and
+// every scaffolded service generates with the PREVIOUS generator
+// while this repo's tests stay green, because
 // TestThePinnedGeneratorAcceptsTheDirective shells out to whatever
 // the const says. That second one surfaces in a consumer's repo,
 // pointing nowhere.
 //
 // Reading go.mod rather than build info: build info reports what the
-// linker included, which is a different question and one whose answer
-// varies by build mode - a go.work workspace reports "(devel)". The
-// require line is the fact being checked, so it is the thing read.
+// linker included, a different question whose answer varies by build
+// mode - a go.work workspace reports "(devel)". The require line is
+// the fact being checked, so it is the thing read.
 func TestTheGeneratorPinAgreesWithGoMod(t *testing.T) {
 	// ../.. from internal/runtime, where `go test` runs.
 	b, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
