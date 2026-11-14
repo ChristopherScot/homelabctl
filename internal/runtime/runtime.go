@@ -95,7 +95,7 @@ func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 // Stated here rather than read from oapi-gen's codegen package the way
 // HeyAPIVersion is: that package is imported, and an imported module
 // cannot name the version it was imported at.
-const OapiGenVersion = "v0.1.0"
+const OapiGenVersion = "v0.1.2"
 
 func (p Params) OapiGenCommand() string {
 	return "go run github.com/ChristopherScot/oapi-gen@" + OapiGenVersion
