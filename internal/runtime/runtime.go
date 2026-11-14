@@ -21,12 +21,8 @@ package runtime
 
 import (
 	"fmt"
-	"runtime/debug"
 	"sort"
 	"strings"
-
-	"golang.org/x/mod/module"
-	"golang.org/x/mod/semver"
 
 	"github.com/ChristopherScot/oapi-gen/codegen"
 )
@@ -87,11 +83,8 @@ type Params struct {
 // so it cannot drift from the version the generate step actually runs.
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 
-// oapiGenModule is the module a scaffolded service generates with.
-const oapiGenModule = "github.com/ChristopherScot/oapi-gen"
-
-// OapiGenCommand is the generator invocation a scaffolded service's
-// //go:generate runs.
+// OapiGenVersion pins the oapi-gen a scaffolded service
+// generates with.
 //
 // Pinned, and run through `go run`, so a service needs nothing
 // installed and two machines generate the same bytes from the same
@@ -99,63 +92,13 @@ const oapiGenModule = "github.com/ChristopherScot/oapi-gen"
 // gate turns red on the day oapi-gen publishes, in a file nobody
 // touched.
 //
-// The version is read from this binary's own build info rather than
-// written down here, so changing go.mod's require line is the whole
-// bump. It used to be a const beside that line with nothing relating
-// them, and missing either half had its own silent failure.
-func (p Params) OapiGenCommand() string {
-	return "go run " + oapiGenModule + "@" + OapiGenVersion()
-}
+// Stated here rather than read from oapi-gen's codegen package the way
+// HeyAPIVersion is: that package is imported, and an imported module
+// cannot name the version it was imported at.
+const OapiGenVersion = "v0.1.2"
 
-// OapiGenVersion is the pinned oapi-gen, from this binary's build
-// info.
-//
-// Asked here rather than at package load. The answer depends on how
-// the binary was built - a go.work workspace reports "(devel)" - and
-// deriving it in an init would make that a correctness problem for
-// `--help` and `version`, which do not scaffold anything and have no
-// use for a pin.
-//
-// Panics rather than returning an error or a sentinel. The value is
-// written verbatim into a generated file that says "do not edit", so
-// a wrong one is invisible until someone wonders why generated output
-// does not match the templates; and the only caller is a template,
-// where an error would surface as a panic from Execute anyway.
-func OapiGenVersion() string {
-	bi, ok := debug.ReadBuildInfo()
-	if !ok {
-		panic("runtime: no build info; cannot determine the pinned " + oapiGenModule)
-	}
-	for _, d := range bi.Deps {
-		if d.Path != oapiGenModule {
-			continue
-		}
-		// Checked for shape, not for how the build got here. A
-		// `replace` leaves d.Version as the require line's version,
-		// which is what a service should pin - the replace says what
-		// THIS tool builds against, and the service's go.mod has no
-		// such line. A go.work workspace over the same checkout
-		// instead reports "(devel)", with no Replace set at all.
-		//
-		// The same three-part test main.go's pickVersion uses, for
-		// the same reason: only a released version is runnable.
-		// IsValid rejects "(devel)" and ""; Canonical differs from
-		// the original exactly when there is build metadata or a
-		// short form, which is how "+dirty", "+incompatible" and the
-		// moving targets "v0" and "v0.1" are caught - go run resolves
-		// those to whatever is latest, which is the determinism this
-		// pin exists to protect.
-		if !semver.IsValid(d.Version) ||
-			semver.Canonical(d.Version) != d.Version ||
-			module.IsPseudoVersion(d.Version) {
-			panic("runtime: " + oapiGenModule + " resolves to " + d.Version +
-				", which is not a released version a scaffolded service could `go run`." +
-				" A go.work workspace does this; use a replace directive instead," +
-				" which leaves the require line's version readable")
-		}
-		return d.Version
-	}
-	panic("runtime: " + oapiGenModule + " is not a dependency, so there is no version to pin")
+func (p Params) OapiGenCommand() string {
+	return "go run github.com/ChristopherScot/oapi-gen@" + OapiGenVersion
 }
 
 // TSClientDir is where a scaffolded service's TypeScript client

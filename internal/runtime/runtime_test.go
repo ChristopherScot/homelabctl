@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -949,8 +950,8 @@ func TestGoServiceGeneratesThroughOapiGen(t *testing.T) {
 	if !ok {
 		t.Fatal("no generate_clients.go")
 	}
-	if !strings.Contains(gen, "oapi-gen@"+OapiGenVersion()+" generate self") {
-		t.Errorf("generate_clients.go does not generate through oapi-gen %s", OapiGenVersion())
+	if !strings.Contains(gen, "oapi-gen@"+OapiGenVersion+" generate self") {
+		t.Errorf("generate_clients.go does not generate through oapi-gen %s", OapiGenVersion)
 	}
 	// Spelled out rather than built from OapiGenCommand, which would
 	// agree with itself however that changed. `go run` is the whole
@@ -1537,15 +1538,13 @@ func resolveFrom(dir, rel string) string {
 // --exit-code` - turns that into a red build in a file nobody touched.
 // The gate only means something if generation is deterministic.
 func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
-	// Spelled out rather than calling the predicate the production
-	// code uses: a test that asks the code under test what it thinks
-	// only confirms the code agrees with itself, and the defect worth
-	// catching is the predicate being wrong. Review found exactly
-	// that - semver.IsValid alone accepts "v0.1", which `go run`
-	// resolves to whatever is latest.
-	got := OapiGenVersion()
-	if !versionRE.MatchString(got) {
-		t.Errorf("OapiGenVersion() = %q, want a full release tag like v0.1.2", got)
+	// A full release tag, spelled out here rather than composed from
+	// x/mod, so this can disagree with any predicate the production
+	// code might grow. semver.IsValid alone is not enough: it accepts
+	// "v0.1", which `go run` resolves to whatever v0.1.x is latest -
+	// a moving target, which is what this test exists to prevent.
+	if !versionRE.MatchString(OapiGenVersion) {
+		t.Errorf("OapiGenVersion is %q, want a full release tag like v0.1.2", OapiGenVersion)
 	}
 }
 
@@ -1576,7 +1575,7 @@ func TestThePinnedGeneratorAcceptsTheDirective(t *testing.T) {
 	for _, flag := range []string{"--ts-out", "--npm-package"} {
 		if !strings.Contains(string(out), flag) {
 			t.Errorf("oapi-gen %s has no %s: the scaffolded directive would fail",
-				OapiGenVersion(), flag)
+				OapiGenVersion, flag)
 		}
 	}
 }
@@ -2719,3 +2718,38 @@ var universe = map[string]bool{
 // form. Written out rather than composed from x/mod so this test can
 // disagree with the production predicate.
 var versionRE = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+// OapiGenVersion and go.mod's require line name the same version.
+//
+// They are two facts, not one - go.mod says what this tool compiles
+// against, the const says what a scaffolded service should `go run` -
+// and under a `replace` they deliberately differ. But they are kept
+// in step on purpose, and nothing related them: miss go.mod and this
+// tool builds against an older library than it tells services to use;
+// miss the const and every scaffolded service generates with the
+// PREVIOUS generator while this repo's tests stay green, because
+// TestThePinnedGeneratorAcceptsTheDirective shells out to whatever
+// the const says. That second one surfaces in a consumer's repo,
+// pointing nowhere.
+//
+// Reading go.mod rather than build info: build info reports what the
+// linker included, which is a different question and one whose answer
+// varies by build mode - a go.work workspace reports "(devel)". The
+// require line is the fact being checked, so it is the thing read.
+func TestTheGeneratorPinAgreesWithGoMod(t *testing.T) {
+	// ../.. from internal/runtime, where `go test` runs.
+	b, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(
+		`(?m)^\s*` + regexp.QuoteMeta("github.com/ChristopherScot/oapi-gen") + `\s+(\S+)\s*$`,
+	).FindStringSubmatch(string(b))
+	if m == nil {
+		t.Fatal("no require line for oapi-gen in go.mod; this test needs a new way to find it")
+	}
+	if m[1] != OapiGenVersion {
+		t.Errorf("go.mod requires %s, but OapiGenVersion is %q - a pin bump moves both",
+			m[1], OapiGenVersion)
+	}
+}
