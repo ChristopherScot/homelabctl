@@ -246,13 +246,28 @@ func runInit(o initOpts) error {
 	printNext(o, c, target, arts)
 	if tidyErr != nil {
 		fmt.Println()
-		fmt.Fprintf(os.Stderr, "WARNING: dependencies did not resolve, so this tree will not build yet.\n")
-		fmt.Fprintf(os.Stderr, "  cd %s && go mod tidy\n", target)
-		// tidyErr itself: errors.Unwrap on a two-verb %w wrap returns
-		// nil, and the sentinel prefix reads fine inline.
-		fmt.Fprintf(os.Stderr, "  (%v)\n", tidyErr)
+		unresolvedWarning(os.Stderr, r, target, tidyErr)
 	}
 	return nil
+}
+
+// unresolvedWarning says the tree will not build and names the
+// commands that would fix it.
+//
+// The commands come from the runtime rather than being written here.
+// They were `cd <dir> && go mod tidy` for everything, so a node
+// service - which resolves with npm and fails at npm - was handed a Go
+// command that does nothing for it, and running the suggestion left
+// the tree exactly as broken. go-service locks in two languages, so
+// every command is printed, not the first.
+func unresolvedWarning(w io.Writer, r runtime.Runtime, dir string, cause error) {
+	fmt.Fprintf(w, "WARNING: dependencies did not resolve, so this tree will not build yet.\n")
+	for _, cmd := range r.Lock() {
+		fmt.Fprintf(w, "  cd %s && %s\n", dir, strings.Join(cmd, " "))
+	}
+	// cause itself: errors.Unwrap on a two-verb %w wrap returns nil,
+	// and the sentinel prefix reads fine inline.
+	fmt.Fprintf(w, "  (%v)\n", cause)
 }
 
 // tidy resolves the generated module's dependencies. Best-effort: a

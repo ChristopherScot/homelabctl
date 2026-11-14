@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ChristopherScot/homelabctl/internal/runtime"
@@ -63,5 +65,58 @@ func TestDocsAskForTheNodeTheScaffoldEnforces(t *testing.T) {
 				t.Errorf("%s asks for %q, but the scaffold enforces >=%s", doc, a[0], floor)
 			}
 		}
+	}
+}
+
+// The "dependencies did not resolve" hint names the command that
+// actually resolves them, for the runtime in hand.
+//
+// It used to print `cd . && go mod tidy` unconditionally, so a node
+// service - which fails that step with npm, not Go - was handed a Go
+// command that does nothing for it. Running the suggestion left the
+// tree exactly as broken.
+//
+// Asserting on Lock() rather than on a literal: the hint is right
+// because it IS the lock command, and a test naming "npm install"
+// would pass while the hint printed something else that happened to
+// contain it.
+func TestTheUnresolvedHintNamesTheRuntimesOwnLockCommand(t *testing.T) {
+	for _, name := range runtime.Names() {
+		r, err := runtime.Get(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lock := r.Lock()
+		if len(lock) == 0 {
+			continue // nothing to suggest, and init prints nothing
+		}
+		t.Run(name, func(t *testing.T) {
+			// The real function init calls, not a rebuild of it:
+			// a test that assembles the hint itself passes no matter
+			// what cmd_init prints.
+			var buf strings.Builder
+			unresolvedWarning(&buf, r, ".", errors.New("boom"))
+			got := buf.String()
+
+			// Every lock command has to appear, not just the first:
+			// go-service resolves in two languages and a user told
+			// only about Go is still stuck on the client.
+			for _, cmd := range lock {
+				if !strings.Contains(got, strings.Join(cmd, " ")) {
+					t.Errorf("the hint does not name %q:\n%s", strings.Join(cmd, " "), got)
+				}
+			}
+			// A Go command must not be suggested to a runtime that
+			// does not lock with Go, which is the bug itself.
+			locksWithGo := false
+			for _, cmd := range lock {
+				if len(cmd) > 0 && cmd[0] == "go" {
+					locksWithGo = true
+				}
+			}
+			if !locksWithGo && strings.Contains(got, "go mod tidy") {
+				t.Errorf("%s does not resolve with Go, but the hint says go mod tidy:\n%s", name, got)
+			}
+		})
 	}
 }
