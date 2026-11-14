@@ -21,6 +21,7 @@ package runtime
 
 import (
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"strings"
 
@@ -83,8 +84,11 @@ type Params struct {
 // so it cannot drift from the version the generate step actually runs.
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 
-// OapiGenVersion pins the oapi-gen a scaffolded service
-// generates with.
+// oapiGenModule is the module a scaffolded service generates with, and
+// the one this tool is built against. One module, so one version.
+const oapiGenModule = "github.com/ChristopherScot/oapi-gen"
+
+// OapiGenVersion pins the oapi-gen a scaffolded service generates with.
 //
 // Pinned, and run through `go run`, so a service needs nothing
 // installed and two machines generate the same bytes from the same
@@ -92,13 +96,49 @@ func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 // gate turns red on the day oapi-gen publishes, in a file nobody
 // touched.
 //
-// Stated here rather than read from oapi-gen's codegen package the way
-// HeyAPIVersion is: that package is imported, and an imported module
-// cannot name the version it was imported at.
-const OapiGenVersion = "v0.1.2"
+// READ FROM go.mod, not written here. It was a const, so a pin bump
+// was two edits with nothing relating them: miss go.mod and this tool
+// compiles against an older library than it tells services to use;
+// miss the const and every scaffolded service generates with the
+// PREVIOUS oapi-gen while this repo's tests pass, because they ask
+// the const what to expect. That second one surfaces in a consumer's
+// repo, pointing nowhere.
+//
+// debug.ReadBuildInfo names the version each dependency was built at,
+// which is exactly go.mod's require line. So `go get -u` alone now
+// moves the directive too, and the two cannot disagree.
+var OapiGenVersion = oapiGenVersionFromBuild()
+
+// oapiGenVersionFromBuild reads the pin out of this binary's own build
+// info.
+//
+// Panics rather than falling back. A wrong version here is written
+// into every scaffolded service's go:generate line, where it is
+// invisible until someone reads generated output and wonders why it
+// does not match the templates - so refusing to start is the kinder
+// failure, and it can only fire if the module is no longer a
+// dependency, which is a build-time mistake.
+func oapiGenVersionFromBuild() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		panic("runtime: no build info; cannot determine the pinned " + oapiGenModule)
+	}
+	for _, d := range bi.Deps {
+		if d.Path != oapiGenModule {
+			continue
+		}
+		// A replace directive points at something with no version a
+		// service could `go run`, so say so rather than scaffold it.
+		if d.Replace != nil {
+			panic("runtime: " + oapiGenModule + " is replaced; a scaffolded service cannot go run a replacement")
+		}
+		return d.Version
+	}
+	panic("runtime: " + oapiGenModule + " is not a dependency, so there is no version to pin")
+}
 
 func (p Params) OapiGenCommand() string {
-	return "go run github.com/ChristopherScot/oapi-gen@" + OapiGenVersion
+	return "go run " + oapiGenModule + "@" + OapiGenVersion
 }
 
 // TSClientDir is where a scaffolded service's TypeScript client
