@@ -25,6 +25,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/mod/semver"
+
 	"github.com/ChristopherScot/oapi-gen/codegen"
 )
 
@@ -98,8 +100,9 @@ const oapiGenModule = "github.com/ChristopherScot/oapi-gen"
 //
 // Read from the build rather than written here, through
 // debug.ReadBuildInfo. So changing the require line is the whole
-// bump, and this tool cannot tell services to use a generator it was
-// not itself built against.
+// bump: there is no second copy to forget. (A `replace` is the
+// deliberate exception - it changes what this tool is built against
+// without changing what it writes. See below.)
 //
 // Build info lists what the linker PUT IN this binary, which is not
 // the same as what go.mod requires - a required module contributing
@@ -135,13 +138,22 @@ func oapiGenVersionFromBuild() string {
 		if d.Path != oapiGenModule {
 			continue
 		}
-		// d.Version is the require line's version whether or not a
-		// replace is in effect - the replacement's own "(devel)" is
-		// on d.Replace, which nothing here reads. So a contributor
-		// building against a local oapi-gen checkout still scaffolds
-		// the released version, which is right: the replace says what
-		// THIS tool is built against, and the service's go.mod has no
-		// such line.
+		// Checked for shape rather than for how it was built. A
+		// `replace` leaves d.Version as the require line's version,
+		// which is right - the replace says what THIS tool is built
+		// against, and the service's go.mod has no such line - but a
+		// go.work workspace over the same local checkout reports
+		// "(devel)" with no Replace set at all. Both are ordinary
+		// ways to develop the two repos together, and only one of
+		// them leaves a version a service could `go run`.
+		//
+		// So the test is whether what came back can be run, not
+		// whether a directive was involved.
+		if !semver.IsValid(d.Version) {
+			panic("runtime: " + oapiGenModule + " resolves to " + d.Version +
+				", which is not a version a scaffolded service could `go run`" +
+				" (a go.work workspace over a local checkout does this)")
+		}
 		return d.Version
 	}
 	panic("runtime: " + oapiGenModule + " is not a dependency, so there is no version to pin")
