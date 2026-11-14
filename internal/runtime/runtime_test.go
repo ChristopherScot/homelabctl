@@ -10,8 +10,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"golang.org/x/mod/semver"
 )
 
 // isSource is a file a runtime writes as code, whatever language.
@@ -951,8 +949,8 @@ func TestGoServiceGeneratesThroughOapiGen(t *testing.T) {
 	if !ok {
 		t.Fatal("no generate_clients.go")
 	}
-	if !strings.Contains(gen, "oapi-gen@"+OapiGenVersion+" generate self") {
-		t.Errorf("generate_clients.go does not generate through oapi-gen %s", OapiGenVersion)
+	if !strings.Contains(gen, "oapi-gen@"+OapiGenVersion()+" generate self") {
+		t.Errorf("generate_clients.go does not generate through oapi-gen %s", OapiGenVersion())
 	}
 	// Spelled out rather than built from OapiGenCommand, which would
 	// agree with itself however that changed. `go run` is the whole
@@ -1539,15 +1537,15 @@ func resolveFrom(dir, rel string) string {
 // --exit-code` - turns that into a red build in a file nobody touched.
 // The gate only means something if generation is deterministic.
 func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
-	// The same predicate oapiGenVersionFromBuild panics on, so this
-	// cannot pass a version the binary would refuse to start with.
-	if !semver.IsValid(OapiGenVersion) {
-		t.Errorf("OapiGenVersion is %q, which is not a version tag", OapiGenVersion)
-	}
-	for _, floating := range []string{"latest", "main", "master", "HEAD"} {
-		if strings.Contains(OapiGenVersion, floating) {
-			t.Errorf("OapiGenVersion is %q: a scaffolded service would generate from a moving target", OapiGenVersion)
-		}
+	// Spelled out rather than calling the predicate the production
+	// code uses: a test that asks the code under test what it thinks
+	// only confirms the code agrees with itself, and the defect worth
+	// catching is the predicate being wrong. Review found exactly
+	// that - semver.IsValid alone accepts "v0.1", which `go run`
+	// resolves to whatever is latest.
+	got := OapiGenVersion()
+	if !versionRE.MatchString(got) {
+		t.Errorf("OapiGenVersion() = %q, want a full release tag like v0.1.2", got)
 	}
 }
 
@@ -1578,7 +1576,7 @@ func TestThePinnedGeneratorAcceptsTheDirective(t *testing.T) {
 	for _, flag := range []string{"--ts-out", "--npm-package"} {
 		if !strings.Contains(string(out), flag) {
 			t.Errorf("oapi-gen %s has no %s: the scaffolded directive would fail",
-				OapiGenVersion, flag)
+				OapiGenVersion(), flag)
 		}
 	}
 }
@@ -2715,3 +2713,9 @@ var universe = map[string]bool{
 	"rune": true, "string": true, "uint": true, "uint8": true,
 	"uint16": true, "uint32": true, "uint64": true, "uintptr": true, "any": true,
 }
+
+// versionRE is a full release tag and nothing else: three numeric
+// components, an optional prerelease, no build metadata and no short
+// form. Written out rather than composed from x/mod so this test can
+// disagree with the production predicate.
+var versionRE = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
