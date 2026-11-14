@@ -21,8 +21,11 @@ package runtime
 
 import (
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"strings"
+
+	"golang.org/x/mod/semver"
 
 	"github.com/ChristopherScot/oapi-gen/codegen"
 )
@@ -83,8 +86,11 @@ type Params struct {
 // so it cannot drift from the version the generate step actually runs.
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 
-// OapiGenVersion pins the oapi-gen a scaffolded service
-// generates with.
+// oapiGenModule is the module a scaffolded service generates with, and
+// the one this tool is built against.
+const oapiGenModule = "github.com/ChristopherScot/oapi-gen"
+
+// OapiGenVersion pins the oapi-gen a scaffolded service generates with.
 //
 // Pinned, and run through `go run`, so a service needs nothing
 // installed and two machines generate the same bytes from the same
@@ -92,13 +98,69 @@ func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 // gate turns red on the day oapi-gen publishes, in a file nobody
 // touched.
 //
-// Stated here rather than read from oapi-gen's codegen package the way
-// HeyAPIVersion is: that package is imported, and an imported module
-// cannot name the version it was imported at.
-const OapiGenVersion = "v0.1.2"
+// Read from the build rather than written here, through
+// debug.ReadBuildInfo. So changing the require line is the whole
+// bump: there is no second copy to forget. (A `replace` is the
+// deliberate exception - it changes what this tool is built against
+// without changing what it writes. See below.)
+//
+// Build info lists what the linker PUT IN this binary, which is not
+// the same as what go.mod requires - a required module contributing
+// no packages would not appear. It appears here because this file
+// imports oapi-gen/codegen, so the module is linked in by the same
+// line that needs its version.
+//
+// The imported oapi-gen PACKAGE cannot name its own version, which is
+// why HeyAPIVersion above reads from the package and this does not.
+// The BINARY can: the version is in its build info.
+var OapiGenVersion = oapiGenVersionFromBuild()
+
+// oapiGenVersionFromBuild reads the pin out of this binary's own build
+// info.
+//
+// Panics on either condition that leaves no version to read: a binary
+// with no build info, and the module not being among the linked
+// dependencies. Panicking rather than returning an error because this
+// package already treats a mis-built binary that way - read() and
+// render() in embedded.go panic on a missing or unparseable template,
+// which is the same class of fault.
+//
+// Panicking rather than falling back because the alternative is
+// worse: a wrong version is written into every scaffolded service's
+// go:generate line, where nothing notices until someone reads
+// generated output and wonders why it does not match the templates.
+func oapiGenVersionFromBuild() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		panic("runtime: no build info; cannot determine the pinned " + oapiGenModule)
+	}
+	for _, d := range bi.Deps {
+		if d.Path != oapiGenModule {
+			continue
+		}
+		// Checked for shape rather than for how it was built. A
+		// `replace` leaves d.Version as the require line's version,
+		// which is right - the replace says what THIS tool is built
+		// against, and the service's go.mod has no such line - but a
+		// go.work workspace over the same local checkout reports
+		// "(devel)" with no Replace set at all. Both are ordinary
+		// ways to develop the two repos together, and only one of
+		// them leaves a version a service could `go run`.
+		//
+		// So the test is whether what came back can be run, not
+		// whether a directive was involved.
+		if !semver.IsValid(d.Version) {
+			panic("runtime: " + oapiGenModule + " resolves to " + d.Version +
+				", which is not a version a scaffolded service could `go run`" +
+				" (a go.work workspace over a local checkout does this)")
+		}
+		return d.Version
+	}
+	panic("runtime: " + oapiGenModule + " is not a dependency, so there is no version to pin")
+}
 
 func (p Params) OapiGenCommand() string {
-	return "go run github.com/ChristopherScot/oapi-gen@" + OapiGenVersion
+	return "go run " + oapiGenModule + "@" + OapiGenVersion
 }
 
 // TSClientDir is where a scaffolded service's TypeScript client

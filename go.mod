@@ -3,6 +3,8 @@ module github.com/ChristopherScot/homelabctl
 go 1.27
 
 require (
+	// Also the version every scaffolded service's //go:generate pins:
+	// internal/runtime reads it from this build. Bumping here moves both.
 	github.com/ChristopherScot/oapi-gen v0.1.2
 	github.com/hashicorp/vault-client-go v0.4.3
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
