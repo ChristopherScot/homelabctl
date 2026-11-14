@@ -1,5 +1,6 @@
-v1.21.14
+v1.21.15
 
+v1.21.15 services generate with oapi-gen v0.1.2, whose Go output is gofmt-clean
 v1.21.14 the docs ask for the Node the scaffold enforces, and a failed lock names the command that would fix it
 v1.21.13 a node service builds the clients it depends on, and only those
 v1.21.12 a node service builds its own generated client once, not twice
