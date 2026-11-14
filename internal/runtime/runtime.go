@@ -85,7 +85,7 @@ type Params struct {
 func (p Params) HeyAPIVersion() string { return codegen.HeyAPIVersion }
 
 // oapiGenModule is the module a scaffolded service generates with, and
-// the one this tool is built against. One module, so one version.
+// the one this tool is built against.
 const oapiGenModule = "github.com/ChristopherScot/oapi-gen"
 
 // OapiGenVersion pins the oapi-gen a scaffolded service generates with.
@@ -96,28 +96,36 @@ const oapiGenModule = "github.com/ChristopherScot/oapi-gen"
 // gate turns red on the day oapi-gen publishes, in a file nobody
 // touched.
 //
-// READ FROM go.mod, not written here. It was a const, so a pin bump
-// was two edits with nothing relating them: miss go.mod and this tool
-// compiles against an older library than it tells services to use;
-// miss the const and every scaffolded service generates with the
-// PREVIOUS oapi-gen while this repo's tests pass, because they ask
-// the const what to expect. That second one surfaces in a consumer's
-// repo, pointing nowhere.
+// Read from the build rather than written here, through
+// debug.ReadBuildInfo. So changing the require line is the whole
+// bump, and this tool cannot tell services to use a generator it was
+// not itself built against.
 //
-// debug.ReadBuildInfo names the version each dependency was built at,
-// which is exactly go.mod's require line. So `go get -u` alone now
-// moves the directive too, and the two cannot disagree.
+// Build info lists what the linker PUT IN this binary, which is not
+// the same as what go.mod requires - a required module contributing
+// no packages would not appear. It appears here because this file
+// imports oapi-gen/codegen, so the module is linked in by the same
+// line that needs its version.
+//
+// The imported oapi-gen PACKAGE cannot name its own version, which is
+// why HeyAPIVersion above reads from the package and this does not.
+// The BINARY can: the version is in its build info.
 var OapiGenVersion = oapiGenVersionFromBuild()
 
 // oapiGenVersionFromBuild reads the pin out of this binary's own build
 // info.
 //
-// Panics rather than falling back. A wrong version here is written
-// into every scaffolded service's go:generate line, where it is
-// invisible until someone reads generated output and wonders why it
-// does not match the templates - so refusing to start is the kinder
-// failure, and it can only fire if the module is no longer a
-// dependency, which is a build-time mistake.
+// Panics on either condition that leaves no version to read: a binary
+// with no build info, and the module not being among the linked
+// dependencies. Panicking rather than returning an error because this
+// package already treats a mis-built binary that way - read() and
+// render() in embedded.go panic on a missing or unparseable template,
+// which is the same class of fault.
+//
+// Panicking rather than falling back because the alternative is
+// worse: a wrong version is written into every scaffolded service's
+// go:generate line, where nothing notices until someone reads
+// generated output and wonders why it does not match the templates.
 func oapiGenVersionFromBuild() string {
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -127,11 +135,13 @@ func oapiGenVersionFromBuild() string {
 		if d.Path != oapiGenModule {
 			continue
 		}
-		// A replace directive points at something with no version a
-		// service could `go run`, so say so rather than scaffold it.
-		if d.Replace != nil {
-			panic("runtime: " + oapiGenModule + " is replaced; a scaffolded service cannot go run a replacement")
-		}
+		// d.Version is the require line's version whether or not a
+		// replace is in effect - the replacement's own "(devel)" is
+		// on d.Replace, which nothing here reads. So a contributor
+		// building against a local oapi-gen checkout still scaffolds
+		// the released version, which is right: the replace says what
+		// THIS tool is built against, and the service's go.mod has no
+		// such line.
 		return d.Version
 	}
 	panic("runtime: " + oapiGenModule + " is not a dependency, so there is no version to pin")
