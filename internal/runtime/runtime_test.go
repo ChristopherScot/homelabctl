@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"golang.org/x/mod/semver"
 )
 
 // isSource is a file a runtime writes as code, whatever language.
@@ -1537,7 +1539,9 @@ func resolveFrom(dir, rel string) string {
 // --exit-code` - turns that into a red build in a file nobody touched.
 // The gate only means something if generation is deterministic.
 func TestTheScaffoldedGeneratorIsPinned(t *testing.T) {
-	if !strings.HasPrefix(OapiGenVersion, "v") {
+	// The same predicate oapiGenVersionFromBuild panics on, so this
+	// cannot pass a version the binary would refuse to start with.
+	if !semver.IsValid(OapiGenVersion) {
 		t.Errorf("OapiGenVersion is %q, which is not a version tag", OapiGenVersion)
 	}
 	for _, floating := range []string{"latest", "main", "master", "HEAD"} {
