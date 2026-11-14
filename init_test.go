@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ChristopherScot/homelabctl/internal/config"
 	"github.com/ChristopherScot/homelabctl/internal/render"
@@ -494,10 +493,21 @@ func TestImagePathIsLowercasedIndependentlyOfTheOwner(t *testing.T) {
 }
 
 // The owner decides the GitHub repo, the image path and the module path,
-// so it is asked for rather than defaulted. These are the paths that must
-// not reach a prompt: an explicit flag, an exported env var, and a
-// non-interactive run, which would otherwise hang a CI job forever
-// instead of failing it.
+// so it is asked for rather than defaulted. These are the two paths that
+// must not reach a prompt: an explicit flag and an exported env var.
+//
+// The third path - that --yes and --dry-run return instead of waiting to
+// be typed at - is NOT tested here, and a test in this process cannot
+// test it. `go test` gives the binary a closed stdin, so the prompt's
+// ReadString returns EOF immediately: deleting the `o.yes || o.dryRun`
+// branch from resolveOwner entirely leaves this file green. The
+// assertion that used to sit here spawned the real resolveOwner under a
+// 10s deadline, which could only ever catch something ELSE being slow -
+// and did, when the gh api call it makes timed out on CI and failed a
+// release with "blocked on input", naming a cause that was not there.
+//
+// Covering it for real needs seams: ghLogin faked so no subprocess runs,
+// and the prompt's reader injected so stdin can be made to block.
 func TestOwnerResolutionOrder(t *testing.T) {
 	t.Setenv(ownerEnv, "from-env")
 
@@ -506,21 +516,6 @@ func TestOwnerResolutionOrder(t *testing.T) {
 	}
 	if got, err := resolveOwner(initOpts{}); err != nil || got != "from-env" {
 		t.Errorf("env should be used when no flag: got %q, %v", got, err)
-	}
-
-	// With neither, a non-interactive run must not block on stdin.
-	t.Setenv(ownerEnv, "")
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		// It may succeed via the gh suggestion or fail for want of one;
-		// what matters is that it returns rather than waiting to be typed at.
-		_, _ = resolveOwner(initOpts{yes: true})
-	}()
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("resolveOwner blocked on input in a non-interactive run")
 	}
 }
 
