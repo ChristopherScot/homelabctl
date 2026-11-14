@@ -62,7 +62,7 @@ curl localhost:3000/healthz
 
 ### TypeScript with no build step
 
-`npm start` runs `node server.ts` directly. Node 22 strips the types as it
+`npm start` runs `node server.ts` directly. Node strips the types as it
 loads the file, so there is no compile step and no `dist/` directory while
 you are working.
 
@@ -71,8 +71,12 @@ verifying them, so a type error will not stop the service from starting.
 `npm run typecheck` is what actually checks them, and CI runs it before
 the tests.
 
-This is why the tooling table in the main guide asks for **Node 22 or
-newer**. On an older Node, `node server.ts` simply fails.
+Stripping works on a Node older than the one the tooling table asks
+for, so it is not what sets the floor. The scaffold's `package.json`
+declares `"node": ">=24"` with `engine-strict=true`, and every workflow
+it generates runs 24 - so below 24 the failure is `npm install`, not
+`node server.ts`. That is why the main guide asks for **Node 24 or
+newer**.
 
 ## Adding a route
 

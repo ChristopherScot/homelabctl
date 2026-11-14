@@ -139,12 +139,15 @@ them for every kind of service — the table after this says which.
 | Tool | What it is | Install |
 |---|---|---|
 | [Go](https://go.dev/doc/install) | the language most services here are written in | go.dev/doc/install |
-| [Node.js 22+](https://nodejs.org/en/download) | JavaScript runtime; comes with `npm` | nodejs.org/en/download |
+| [Node.js 24+](https://nodejs.org/en/download) | JavaScript runtime; comes with `npm` | nodejs.org/en/download |
 | [git](https://git-scm.com/downloads) | version control | git-scm.com/downloads |
 | [gh](https://cli.github.com/) | GitHub's command line tool | cli.github.com |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | talks to the Kubernetes cluster | kubernetes.io/docs/tasks/tools |
 
-Node must be **version 22 or newer** — check with `node --version`.
+Node must be **version 24 or newer** — check with `node --version`. A
+scaffolded node service declares that floor in its own `package.json`
+and sets `engine-strict=true`, so an older Node fails `npm install`
+rather than building something subtly different; CI runs 24 too.
 
 Which you need:
 
