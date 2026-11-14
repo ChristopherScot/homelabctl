@@ -325,6 +325,12 @@ This also gives anyone who wants to call your service a ready-made client
 library, in both Go and TypeScript, so they do not have to hand-write HTTP
 requests.
 
+For the other direction — a typed client for an API you do **not** own,
+from a spec someone else publishes — use
+[oapi-gen](https://github.com/ChristopherScot/oapi-gen), which is the
+generator homelabctl itself calls. Its README covers vendoring a remote
+spec and patching one that does not quite generate.
+
 **If you do not want a spec** — a webhook receiver, something with one
 endpoint — use `--no-spec`:
 
