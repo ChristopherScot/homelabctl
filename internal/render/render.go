@@ -116,9 +116,11 @@ func UnknownOverrides(c *config.Config, outs []Output) []string {
 // to prevent: Argo reports Synced and Healthy, and the config lied.
 // imageRef is what a rendered manifest names. Always the repository at
 // :latest, because argocd-image-updater owns the actual version: it
-// resolves :latest to a digest and writes THAT into kustomization.yaml,
-// which is why every committed deployment.yaml in this cluster says
-// :latest and none carries a digest.
+// resolves :latest to a digest and writes THAT onto the live Argo
+// Application's kustomize images (write-back-method: argocd), which is
+// why every committed deployment.yaml in this cluster says :latest and
+// none carries a digest. containerBody's imagePullPolicy: IfNotPresent
+// relies on that pin; without it a node keeps whatever :latest it has.
 //
 // Rendering therefore needs no image argument, and not having one is
 // what makes All deterministic - the same config produces the same
@@ -431,7 +433,9 @@ func resourceNames(out []Output) []string {
 // kustomization is not optional. argocd-image-updater can only write image
 // bumps into Kustomize, Helm or Plugin sources; without this file Argo
 // classifies the app as Directory, the updater skips it with only a log
-// warning, and the app sits Synced/Healthy on a stale image forever.
+// warning, and the app sits Synced/Healthy on a stale image forever -
+// made worse by containerBody's imagePullPolicy: IfNotPresent, which
+// assumes the digest pin this file makes possible.
 func kustomization(c *config.Config, out []Output) string {
 	var b strings.Builder
 	b.WriteString("# Required: argocd-image-updater writes the image digest into the\n")
@@ -513,8 +517,8 @@ spec:
             - containerPort: %d
 `, c.Name, c.Namespace, c.Name, c.Team, c.Replicas, c.Name, metricsAnnotations(c), c.Name, c.Team, serviceAccountName(c), c.Name, imageRef, c.Port)
 
-	// Shared with the CronJob: env, secrets, resources and hardening are
-	// the same container either way, and a second copy here is how PORT
+	// Shared with the CronJob: pull policy, env, secrets, resources and
+	// hardening are the same container either way, and a second copy here is how PORT
 	// came to be emitted twice in one shape and once in the other.
 	b.WriteString(containerBody(c, "          "))
 	// Readiness polls faster than liveness: a slow readiness probe leaves a
@@ -638,29 +642,29 @@ func reloadSecrets(c *config.Config) []string {
 	return out
 }
 
-// cronJob renders a scheduled workload. It shares the container spec with
-// deployment - image, env, resources, hardening - and differs in
-// everything about lifecycle.
 // containerBody renders the container fields that are identical across
-// workload shapes - env, secrets, resources, hardening. Probes belong to
-// the deployment only: a job that runs to completion has no readiness to
-// report. pad is the indent the caller nests it at.
+// workload shapes - pull policy, env, secrets, resources, hardening.
+// Probes belong to the deployment only: a job that runs to completion has
+// no readiness to report. pad is the indent the caller nests it at.
 func containerBody(c *config.Config, pad string) string {
 	var b strings.Builder
-	// Written into the manifest rather than here, because the reader who
-	// needs it is the one looking at a deployment that never pulls.
-	b.WriteString(indentBlock(`# Stated rather than left to Kubernetes, whose default keys off the
-# tag: :latest defaults to Always, and the value is fixed when the
-# workload is first created and kept after that. Two services from the
-# same template used to differ here depending on how their image
-# reference looked on that day.
+	// Explained in the manifest rather than only here, because the reader
+	// who needs it is the one looking at a running workload and asking
+	// why it did or did not pull a new image.
+	b.WriteString(indentBlock(`# Stated rather than left to Kubernetes, whose default for a :latest
+# image is Always.
 #
-# IfNotPresent is correct because argocd-image-updater pins the image by
-# digest, and a digest names exactly one image. A new build arrives as a
-# new reference and is pulled; an unchanged one is already on the node.
-# Always only adds a registry round trip to every start, and a pod
-# scaling up from zero cannot start while the registry is unreachable,
-# even with the image in the node's cache.
+# This depends on argocd-image-updater pinning the image by digest (see
+# kustomization.yaml). A digest names exactly one image, so a new build
+# arrives as a new reference and is pulled, while an unchanged one is
+# reused from the node's cache. Always would add a registry round trip
+# to every start, and a pod scaling up from zero could not start while
+# the registry was unreachable, even with the image cached.
+#
+# If the pin is missing - the updater has not written one yet, or is
+# skipping this app - the pod runs bare :latest, and a node that already
+# has some :latest keeps it, restart or not. Check the live Application's
+# spec.source.kustomize.images for a digest.
 imagePullPolicy: IfNotPresent
 `, pad))
 	// PORT is a default, not an addition. Emitting it unconditionally and
@@ -754,6 +758,9 @@ imagePullPolicy: IfNotPresent
 	return b.String()
 }
 
+// cronJob renders a scheduled workload. It shares the container spec with
+// deployment - image, pull policy, env, resources, hardening - and
+// differs in everything about lifecycle.
 func cronJob(c *config.Config, imageRef string) string {
 	var b strings.Builder
 	tz := c.TimeZone

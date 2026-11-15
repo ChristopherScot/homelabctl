@@ -1117,7 +1117,7 @@ func TestScrapeAnnotationsLandOnThePodTemplate(t *testing.T) {
 
 // Left unset, Kubernetes defaults a :latest image to Always, so every
 // start - including every wake from zero - goes to the registry for an
-// image the digest pin already guarantees is on the node.
+// image the digest pin makes safe to reuse from the node's cache.
 func TestContainersPullOnlyWhenTheImageIsMissing(t *testing.T) {
 	for _, tc := range []struct {
 		kind string
@@ -1133,12 +1133,7 @@ func TestContainersPullOnlyWhenTheImageIsMissing(t *testing.T) {
 				c.Schedule = "*/5 * * * *"
 			}
 
-			var body string
-			for _, o := range mustAll(t, mustConfig(t, c)) {
-				if o.Path == tc.file {
-					body = o.Body
-				}
-			}
+			body := findOutput(t, mustConfig(t, c), tc.file)
 			var doc map[string]any
 			if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
 				t.Fatalf("parsing %s: %v", tc.file, err)
