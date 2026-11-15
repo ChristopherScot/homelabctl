@@ -27,6 +27,11 @@ render`, `regen`, `check` and `vault` have nothing to do here.
 
 Already working:
 
+- **Automatic updates on launch** — install the latest release, then execute
+  the original command exactly once on the new binary. Arguments, working
+  directory, environment, terminal streams, and exit status are preserved.
+  Checks time out after 5 seconds and downloads after 2 minutes; a failed check
+  or install reports to stderr and lets the current version continue.
 - **`mytool version`** — prints the version, stamped in by CI.
 - **`mytool update`** — downloads and installs the latest release. Your
   users never have to find a download page.
@@ -97,7 +102,11 @@ CI releases **only when `VERSION` changes** on `main`. Tests run on every
 push; a push that does not touch `VERSION` builds and releases nothing.
 That means a release is always deliberate.
 
-Once it is published, your users get it with:
+Once it is published, released builds install it on their next invocation.
+The new process skips checking once to avoid a restart loop, then executes
+the original command. The marker is removed before command execution, so
+subsequent invocations check again. `mytool update --check` remains read-only.
+Users can also explicitly update with:
 
 ```sh
 mytool update

@@ -119,7 +119,15 @@ macOS quarantines downloaded binaries. Clear it:
 xattr -d com.apple.quarantine ~/bin/homelabctl
 ```
 
-Later versions install themselves:
+Released builds check for updates on every launch. When an update is available,
+`homelabctl` installs it and runs your original command on the new version,
+preserving arguments, working directory, environment, and terminal input/output.
+For example, `homelabctl regen` updates first, then runs `regen` exactly once.
+
+Checks time out after 5 seconds; downloads after 2 minutes. If checking or
+installing fails, the current version continues with your command. Update
+notices go to stderr. Development builds skip updates. The explicit updater
+remains available, and `update --check` only checks:
 
 ```sh
 homelabctl update
@@ -375,8 +383,9 @@ go run . --help
 ```
 
 To release a version, edit the `VERSION` file and push. CI builds it for
-every platform and publishes it. Your users install updates with
-`mytool update` — that command is generated for you.
+every platform and publishes it. Released tools update automatically on launch
+and then execute the original command. `mytool update --check` remains a
+read-only check.
 
 More: [docs/runtimes/go-cli.md](docs/runtimes/go-cli.md).
 

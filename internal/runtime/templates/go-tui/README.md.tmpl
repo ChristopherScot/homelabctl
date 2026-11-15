@@ -17,8 +17,14 @@ make build            # compile
 make run ARGS='...'   # run without installing
 ```
 
-Releases are built by CI and published to GitHub Releases;
-`{{ .Name }} update` pulls the newest one.
+Releases are built by CI and published to GitHub Releases. Released builds
+check on every launch, install updates, and run the original command on the
+new version. Arguments, working directory, environment, and terminal input/output
+are preserved. Updates happen before the terminal UI starts.
+
+Checks time out after 5 seconds; downloads after 2 minutes. Failed checks or
+installs report to stderr and let the current version continue. Development
+builds skip updates. `{{ .Name }} update --check` checks without installing.
 
 ## Testing
 

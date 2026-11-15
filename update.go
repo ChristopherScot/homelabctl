@@ -10,7 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
@@ -19,19 +22,66 @@ import (
 const (
 	repoOwner = "ChristopherScot"
 
-	// The repo that holds this service, which is where its releases
-	// land. In a monorepo that is the PARENT repo, not the service - a
-	// release is per repository, so naming the service here asks
-	// api.github.com for a repository that does not exist.
+	// A release is per REPOSITORY. In a monorepo that is the PARENT repo,
+	// not the service.
 	repoName = "homelabctl"
 
-	// A homelabctl binary is a few MB; anything near this is not our asset.
+	tagPrefix = ""
+
 	maxBinarySize = 100 * 1024 * 1024
 )
 
+// Checks must not hold a command indefinitely when GitHub is unavailable.
+var releaseClient = &http.Client{Timeout: 5 * time.Second}
+var downloadClient = &http.Client{Timeout: 2 * time.Minute}
+
+const updateRestartEnv = "_homelabctl_UPDATE_REEXEC"
+
+// autoUpdate runs before Cobra or the TUI can execute user work. Exec keeps
+// the PID, terminal, working directory and exit status of the original call.
+func autoUpdate() error {
+	restarted := os.Getenv(updateRestartEnv) == strconv.Itoa(os.Getpid())
+	os.Unsetenv(updateRestartEnv) // do not pass the one-use marker to child commands
+	if restarted || version() == "dev" {
+		return nil
+	}
+	// The explicit updater already checks; --check must remain read-only.
+	if len(os.Args) > 1 && os.Args[1] == "update" {
+		return nil
+	}
+	rel, err := latestRelease()
+	if err == nil && !isNewer(releaseVersion(rel.TagName), ensureV(version())) {
+		return nil
+	}
+	if err == nil {
+		err = installRelease(rel)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "update:", err, "— continuing with", version())
+		return nil
+	}
+	fmt.Fprintln(os.Stderr, "updated to", rel.TagName)
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate updated executable: %w", err)
+	}
+	env := append(os.Environ(), updateRestartEnv+"="+strconv.Itoa(os.Getpid()))
+	// If exec fails, do not silently execute the command on the old version
+	// after reporting a successful installation.
+	if err := syscall.Exec(executable, os.Args, env); err != nil {
+		return fmt.Errorf("start updated executable: %w", err)
+	}
+	return nil
+}
+
 type githubRelease struct {
 	TagName string `json:"tag_name"`
-	Assets  []struct {
+
+	// /releases returns drafts and prereleases, unlike /releases/latest.
+	Draft      bool `json:"draft"`
+	Prerelease bool `json:"prerelease"`
+
+	Assets []struct {
 		Name               string `json:"name"`
 		BrowserDownloadURL string `json:"browser_download_url"`
 	} `json:"assets"`
@@ -55,53 +105,49 @@ func runUpdate(checkOnly bool) error {
 	v := version()
 	fmt.Printf("current version: %s\n", v)
 
-	// A dev build has no meaningful version, and overwriting someone's
-	// working-tree build with a release is never what they want. Checked
-	// before the network call so the message is the real reason rather
-	// than whatever the API happens to say.
 	if v == "dev" {
 		fmt.Println("running a dev build; not updating")
 		return nil
 	}
-	// semver wants the leading v, so normalise toward it rather than
-	// stripping it off and putting it back.
 	current := ensureV(v)
 
 	rel, err := latestRelease()
 	if err != nil {
 		return fmt.Errorf("check for updates: %w", err)
 	}
-	latest := ensureV(rel.TagName)
+	latest := releaseVersion(rel.TagName)
 	if !isNewer(latest, current) {
 		fmt.Println("already up to date")
 		return nil
 	}
-	fmt.Printf("new version available: %s\n", rel.TagName)
+	fmt.Printf("new version available: %s\n", latest)
 	if checkOnly {
 		fmt.Println("run 'homelabctl update' to install it")
 		return nil
 	}
 
-	want := fmt.Sprintf("homelabctl_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
-	var url string
-	for _, a := range rel.Assets {
-		if a.Name == want {
-			url = a.BrowserDownloadURL
-			break
-		}
-	}
-	if url == "" {
-		return fmt.Errorf("release %s has no asset for %s/%s", rel.TagName, runtime.GOOS, runtime.GOARCH)
-	}
-	if err := installFrom(url); err != nil {
+	if err := installRelease(rel); err != nil {
 		return err
 	}
 	fmt.Printf("updated to %s\n", rel.TagName)
 	return nil
 }
 
+func installRelease(rel *githubRelease) error {
+	want := assetName()
+	for _, a := range rel.Assets {
+		if a.Name == want {
+			return installFrom(a.BrowserDownloadURL)
+		}
+	}
+	return fmt.Errorf("release %s has no asset for %s/%s", rel.TagName, runtime.GOOS, runtime.GOARCH)
+}
+
+// latestRelease returns the newest release belonging to THIS tool.
+// Not /releases/latest, which in a monorepo would be whichever sibling
+// released most recently. Releases come back newest-first.
 func latestRelease() (*githubRelease, error) {
-	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName))
+	resp, err := releaseClient.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", repoOwner, repoName))
 	if err != nil {
 		return nil, err
 	}
@@ -109,16 +155,58 @@ func latestRelease() (*githubRelease, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("github api returned %s", resp.Status)
 	}
-	var rel githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+	var rels []githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&rels); err != nil {
 		return nil, err
 	}
-	return &rel, nil
+	rel := pickRelease(rels)
+	if rel == nil {
+		return nil, fmt.Errorf("no homelabctl release found in %s/%s", repoOwner, repoName)
+	}
+	return rel, nil
 }
 
-// ensureV normalises a version toward the leading "v" that
-// golang.org/x/mod/semver requires. Release tags carry it and ldflags
-// may not, so accept either spelling.
+// pickRelease prefers a prefixed tag, then falls back to any release with
+// this tool's asset so pre-namespace releases stay installable.
+func pickRelease(rels []githubRelease) *githubRelease {
+	want := assetName()
+	var fallback *githubRelease
+	for i := range rels {
+		r := &rels[i]
+		if r.Draft || r.Prerelease {
+			continue
+		}
+		if tagPrefix != "" && strings.HasPrefix(r.TagName, tagPrefix) {
+			return r
+		}
+		if tagPrefix == "" {
+			return r
+		}
+		if fallback == nil && hasAsset(r, want) {
+			fallback = r
+		}
+	}
+	return fallback
+}
+
+func hasAsset(r *githubRelease, name string) bool {
+	for _, a := range r.Assets {
+		if a.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func assetName() string {
+	return fmt.Sprintf("homelabctl_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+}
+
+func releaseVersion(tag string) string {
+	return ensureV(strings.TrimPrefix(tag, tagPrefix))
+}
+
+// ensureV normalises toward the leading "v" that x/mod/semver requires.
 func ensureV(v string) string {
 	if strings.HasPrefix(v, "v") {
 		return v
@@ -126,20 +214,10 @@ func ensureV(v string) string {
 	return "v" + v
 }
 
-// isNewer reports whether latest supersedes current.
-//
-// x/mod/semver rather than a hand-rolled comparison: comparing dotted
-// components pairwise reads "10" as older than "2" unless every
-// component parses as an integer, so a hand-rolled version goes quiet
-// the moment any component reaches double digits - it reports "already
-// up to date" forever, which is the failure mode you never notice.
-//
-// semver.Compare is the same comparison the go command uses, including
-// the rule that a prerelease sorts BEFORE its release.
-//
-// An unparseable version returns false: better to leave someone on a
-// working binary than to talk them into replacing it based on a
-// comparison that did not mean anything.
+// isNewer uses x/mod/semver rather than a hand-rolled comparison: a
+// pairwise compare reads "10" as older than "2" and goes silent the
+// moment any component reaches double digits. An unparseable version
+// returns false, leaving the caller on a working binary.
 func isNewer(latest, current string) bool {
 	if !semver.IsValid(latest) || !semver.IsValid(current) {
 		return false
@@ -147,12 +225,11 @@ func isNewer(latest, current string) bool {
 	return semver.Compare(latest, current) > 0
 }
 
-// installFrom replaces the running binary. The rename dance matters: a
-// running executable cannot be overwritten in place on every platform, but
-// it can be renamed out of the way, so write beside it and swap. The old
-// binary is kept until the swap succeeds so a failure is recoverable.
+// installFrom writes beside the executable and atomically renames the complete
+// download over it. On our macOS/Linux targets the running process keeps its
+// old inode until exec, and failed downloads never remove the installed binary.
 func installFrom(url string) error {
-	resp, err := http.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return err
 	}
@@ -160,23 +237,23 @@ func installFrom(url string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download returned %s", resp.Status)
 	}
-
 	binPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locate executable: %w", err)
 	}
-	// Resolve symlinks so we replace the real file, not a link to it.
 	binPath, err = filepath.EvalSymlinks(binPath)
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)
 	}
+	return installArchive(resp.Body, binPath)
+}
 
-	gz, err := gzip.NewReader(resp.Body)
+func installArchive(archive io.Reader, binPath string) error {
+	gz, err := gzip.NewReader(archive)
 	if err != nil {
 		return fmt.Errorf("decompress: %w", err)
 	}
 	defer gz.Close()
-
 	tr := tar.NewReader(gz)
 	for {
 		h, err := tr.Next()
@@ -189,37 +266,37 @@ func installFrom(url string) error {
 		if h.Name != "homelabctl" && h.Name != "./homelabctl" {
 			continue
 		}
-		if h.Size > maxBinarySize {
-			return fmt.Errorf("binary is %d bytes, over the %d limit", h.Size, maxBinarySize)
+		if h.Typeflag != tar.TypeReg || h.Size <= 0 || h.Size > maxBinarySize {
+			return fmt.Errorf("invalid binary entry: type %d, size %d", h.Typeflag, h.Size)
 		}
-
-		tmp := binPath + ".new"
-		f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		f, err := os.CreateTemp(filepath.Dir(binPath), ".homelabctl-update-*")
 		if err != nil {
-			return fmt.Errorf("create %s: %w", tmp, err)
+			return fmt.Errorf("stage update: %w", err)
 		}
-		n, err := io.Copy(f, io.LimitReader(tr, maxBinarySize))
-		f.Close()
-		if err != nil {
-			os.Remove(tmp)
-			return fmt.Errorf("write %s: %w", tmp, err)
+		tmp := f.Name()
+		defer os.Remove(tmp)
+		defer f.Close()
+		if _, err := io.CopyN(f, tr, h.Size); err != nil {
+			return fmt.Errorf("write update: %w", err)
 		}
-		if n == maxBinarySize {
-			os.Remove(tmp)
-			return fmt.Errorf("binary exceeded the %d byte limit", maxBinarySize)
+		// Consume the gzip trailer before installing: a truncated or corrupt
+		// response can contain all binary bytes but still fail its checksum.
+		n, err := io.Copy(io.Discard, io.LimitReader(gz, maxBinarySize+1))
+		if err != nil || n > maxBinarySize {
+			return fmt.Errorf("invalid archive trailer: bytes=%d, error=%v", n, err)
 		}
-
-		old := binPath + ".old"
-		if err := os.Rename(binPath, old); err != nil {
-			os.Remove(tmp)
-			return fmt.Errorf("move current binary aside: %w", err)
+		if err := f.Chmod(0o755); err != nil {
+			return err
+		}
+		if err := f.Sync(); err != nil {
+			return err
+		}
+		if err := f.Close(); err != nil {
+			return err
 		}
 		if err := os.Rename(tmp, binPath); err != nil {
-			os.Rename(old, binPath) // put it back
-			os.Remove(tmp)
 			return fmt.Errorf("install new binary: %w", err)
 		}
-		os.Remove(old)
 		return nil
 	}
 }
