@@ -49,6 +49,8 @@ go run .
 
 Also included, the same as a `go-cli`:
 
+- Automatic updates on launch, before entering the terminal UI; the new
+  version resumes the original invocation.
 - `mytui version`, `mytui update`, `mytui completion install`
 - a release pipeline for macOS and Linux
 
@@ -122,5 +124,5 @@ reach your tool.
 ## Releasing
 
 Identical to `go-cli`: edit `VERSION`, push, and CI publishes. Users
-update with `mytui update`. See [go-cli.md](go-cli.md#releasing) for the
+update automatically on launch, or explicitly with `mytui update`. See [go-cli.md](go-cli.md#releasing) for the
 details, including the two couplings that fail quietly if broken.

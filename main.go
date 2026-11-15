@@ -94,7 +94,12 @@ func versionCmd() *cobra.Command {
 }
 
 func main() {
-	if err := rootCmd().Execute(); err != nil {
+	root := rootCmd()
+	if err := autoUpdate(root); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
