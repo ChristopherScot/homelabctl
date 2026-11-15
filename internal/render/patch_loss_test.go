@@ -80,6 +80,7 @@ func TestPatchThatRestatesTheContainerIsAllowed(t *testing.T) {
       containers:
         - name: svc
           image: ghcr.io/o/svc:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
           env:

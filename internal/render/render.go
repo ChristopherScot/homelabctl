@@ -647,6 +647,22 @@ func reloadSecrets(c *config.Config) []string {
 // report. pad is the indent the caller nests it at.
 func containerBody(c *config.Config, pad string) string {
 	var b strings.Builder
+	// Written into the manifest rather than here, because the reader who
+	// needs it is the one looking at a deployment that never pulls.
+	b.WriteString(indentBlock(`# Stated rather than left to Kubernetes, whose default keys off the
+# tag: :latest defaults to Always, and the value is fixed when the
+# workload is first created and kept after that. Two services from the
+# same template used to differ here depending on how their image
+# reference looked on that day.
+#
+# IfNotPresent is correct because argocd-image-updater pins the image by
+# digest, and a digest names exactly one image. A new build arrives as a
+# new reference and is pulled; an unchanged one is already on the node.
+# Always only adds a registry round trip to every start, and a pod
+# scaling up from zero cannot start while the registry is unreachable,
+# even with the image in the node's cache.
+imagePullPolicy: IfNotPresent
+`, pad))
 	// PORT is a default, not an addition. Emitting it unconditionally and
 	// then ranging over Env would write the key TWICE for a config that
 	// sets it explicitly; Kubernetes accepts that and silently keeps the

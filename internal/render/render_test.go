@@ -1115,6 +1115,49 @@ func TestScrapeAnnotationsLandOnThePodTemplate(t *testing.T) {
 	}
 }
 
+// Left unset, Kubernetes defaults a :latest image to Always, so every
+// start - including every wake from zero - goes to the registry for an
+// image the digest pin already guarantees is on the node.
+func TestContainersPullOnlyWhenTheImageIsMissing(t *testing.T) {
+	for _, tc := range []struct {
+		kind string
+		file string
+	}{
+		{config.KindService, "deployment.yaml"},
+		{config.KindCronJob, "cronjob.yaml"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			c := base()
+			c.Kind = tc.kind
+			if tc.kind == config.KindCronJob {
+				c.Schedule = "*/5 * * * *"
+			}
+
+			var body string
+			for _, o := range mustAll(t, mustConfig(t, c)) {
+				if o.Path == tc.file {
+					body = o.Body
+				}
+			}
+			var doc map[string]any
+			if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+				t.Fatalf("parsing %s: %v", tc.file, err)
+			}
+			spec, _ := podTemplate(t, doc, tc.kind)["spec"].(map[string]any)
+			containers, _ := spec["containers"].([]any)
+			if len(containers) == 0 {
+				t.Fatalf("no containers in %s:\n%s", tc.file, body)
+			}
+			for _, raw := range containers {
+				ctr, _ := raw.(map[string]any)
+				if got := ctr["imagePullPolicy"]; got != "IfNotPresent" {
+					t.Errorf("container %v imagePullPolicy = %v, want IfNotPresent\n%s", ctr["name"], got, body)
+				}
+			}
+		})
+	}
+}
+
 // podTemplate digs out spec.template (Deployment) or
 // spec.jobTemplate.spec.template (CronJob).
 func podTemplate(t *testing.T, doc map[string]any, kind string) map[string]any {
