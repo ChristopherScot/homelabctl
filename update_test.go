@@ -34,6 +34,7 @@ import (
  "os"
  "strings"
  "time"
+ "github.com/spf13/cobra"
 )
 var Version string
 func version() string { return Version }
@@ -48,7 +49,9 @@ func (transport) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 func main() {
  releaseClient = &http.Client{Transport: transport{}, Timeout: 100*time.Millisecond}
- if err := autoUpdate(); err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
+ root := &cobra.Command{Use: "homelabctl"}
+ root.AddCommand(updateCmd())
+ if err := autoUpdate(root); err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
  input, _ := io.ReadAll(os.Stdin)
  cwd, _ := os.Getwd()
  json.NewEncoder(os.Stdout).Encode(map[string]any{
@@ -284,9 +287,14 @@ func TestAutoUpdateLeavesExplicitUpdaterInControl(t *testing.T) {
 		t.Fatal("startup checked before the explicit update command")
 		return nil, nil
 	})}
-	for _, args := range [][]string{{"homelabctl", "update"}, {"homelabctl", "update", "--check"}} {
+	for _, args := range [][]string{
+		{"homelabctl", "update"},
+		{"homelabctl", "update", "--check"},
+		{"homelabctl", "--help=false", "update", "--check"},
+		{"homelabctl", "--check=true", "update"},
+	} {
 		os.Args = args
-		if err := autoUpdate(); err != nil {
+		if err := autoUpdate(rootCmd()); err != nil {
 			t.Fatal(err)
 		}
 	}

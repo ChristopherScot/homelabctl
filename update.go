@@ -39,14 +39,15 @@ const updateRestartEnv = "_homelabctl_UPDATE_REEXEC"
 
 // autoUpdate runs before Cobra or the TUI can execute user work. Exec keeps
 // the PID, terminal, working directory and exit status of the original call.
-func autoUpdate() error {
+func autoUpdate(root *cobra.Command) error {
 	restarted := os.Getenv(updateRestartEnv) == strconv.Itoa(os.Getpid())
 	os.Unsetenv(updateRestartEnv) // do not pass the one-use marker to child commands
 	if restarted || version() == "dev" {
 		return nil
 	}
 	// The explicit updater already checks; --check must remain read-only.
-	if len(os.Args) > 1 && os.Args[1] == "update" {
+	command, _, err := root.Find(os.Args[1:])
+	if err == nil && command.Parent() == root && command.Name() == "update" {
 		return nil
 	}
 	rel, err := latestRelease()
