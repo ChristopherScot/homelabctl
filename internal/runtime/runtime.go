@@ -426,6 +426,7 @@ type Runtime interface {
 	// Lock resolves declared dependencies into a lockfile: `go mod tidy`,
 	// `npm install --package-lock-only`. It reads what the manifest
 	// already says and pins it, so running it twice changes nothing.
+	// Params selects commands for the files this service actually generates.
 	//
 	// It belongs here rather than in a switch at the call site because it
 	// is the one build concern that cannot be expressed as a template.
@@ -433,7 +434,7 @@ type Runtime interface {
 	// name, so a language whose name did not start with one of those got
 	// no lockfile and no warning - and a Go service without go.sum does
 	// not build at all.
-	Lock() [][]string
+	Lock(p Params) [][]string
 
 	// Upgrade moves dependencies to newer versions: `go get -u`. Unlike
 	// Generate and Lock, its output depends on what the world has

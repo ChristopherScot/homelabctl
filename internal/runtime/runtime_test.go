@@ -281,7 +281,7 @@ func TestRuntimesDeclareDependencyResolution(t *testing.T) {
 			if f.Path == "package.json" && name == "go-service" {
 				continue
 			}
-			cmds := r.Lock()
+			cmds := r.Lock(Params{Spec: true})
 			if len(cmds) == 0 {
 				t.Errorf("%s generates %s but declares no Lock command; its scaffold will not build",
 					name, f.Path)
@@ -601,7 +601,7 @@ func TestGoServiceIsSpecFirst(t *testing.T) {
 	if len(r.Generate(testParams())) == 0 {
 		t.Error("go-service generates nothing, so the spec derives no code")
 	}
-	if len(r.Lock()) == 0 {
+	if len(r.Lock(Params{Spec: true})) == 0 {
 		t.Error("go-service locks nothing, so a scaffold has no go.sum")
 	}
 
@@ -609,7 +609,7 @@ func TestGoServiceIsSpecFirst(t *testing.T) {
 	// may depend on what the world published today. Only Upgrade may.
 	for phase, cmds := range map[string][][]string{
 		"Generate": r.Generate(testParams()),
-		"Lock":     r.Lock(),
+		"Lock":     r.Lock(Params{Spec: true}),
 	} {
 		for _, cmd := range cmds {
 			if strings.Contains(strings.Join(cmd, " "), " -u") {

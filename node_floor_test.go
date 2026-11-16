@@ -93,7 +93,7 @@ func TestTheUnresolvedHintNamesTheRuntimesOwnLockCommand(t *testing.T) {
 		// cause, with no remediation between them - worse than the
 		// wrong command this test exists to prevent. Every runtime
 		// declares one today, so this holds the line.
-		lock := r.Lock()
+		lock := r.Lock(runtime.Params{Spec: true})
 		if len(lock) == 0 {
 			t.Errorf("%s declares no Lock(), so the warning would name no way to fix it", name)
 			continue
@@ -105,7 +105,7 @@ func TestTheUnresolvedHintNamesTheRuntimesOwnLockCommand(t *testing.T) {
 			// site - inlining this back into runInit would leave
 			// this green.
 			var buf strings.Builder
-			unresolvedWarning(&buf, r, ".", errors.New("boom"))
+			unresolvedWarning(&buf, r, runtime.Params{Spec: true}, ".", errors.New("boom"))
 			got := buf.String()
 
 			// Every lock command has to appear, not just the first:

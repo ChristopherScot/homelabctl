@@ -245,7 +245,7 @@ func runInit(o initOpts) error {
 	}
 	printNext(o, c, target, arts)
 	if tidyErr != nil {
-		unresolvedWarning(os.Stderr, r, target, tidyErr)
+		unresolvedWarning(os.Stderr, r, artifactParams(c, o.owner, o.parentRepo), target, tidyErr)
 	}
 	return nil
 }
@@ -268,10 +268,10 @@ func runInit(o initOpts) error {
 // site, which put the separator on stdout and the warning on stderr -
 // redirect stderr and the blank line stayed on the terminal while the
 // warning arrived unseparated.
-func unresolvedWarning(w io.Writer, r runtime.Runtime, dir string, cause error) {
+func unresolvedWarning(w io.Writer, r runtime.Runtime, params runtime.Params, dir string, cause error) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "WARNING: dependencies did not resolve, so this tree will not build yet.\n")
-	for _, cmd := range r.Lock() {
+	for _, cmd := range r.Lock(params) {
 		fmt.Fprintf(w, "  cd %s && %s\n", dir, strings.Join(cmd, " "))
 	}
 	fmt.Fprintf(w, "  (%v)\n", cause)
@@ -824,7 +824,8 @@ func setupLocal(o initOpts, c *config.Config, r runtime.Runtime, dir string) err
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	a := r.Artifacts(artifactParams(c, o.owner, o.parentRepo))
+	params := artifactParams(c, o.owner, o.parentRepo)
+	a := r.Artifacts(params)
 
 	// What --overwrite may name: the files init hands over and never
 	// rewrites. Not everything it writes - api/ and clients/ are regen's,
@@ -1018,7 +1019,7 @@ func setupLocal(o initOpts, c *config.Config, r runtime.Runtime, dir string) err
 		// nothing to resolve
 		// Generate first - a lockfile cannot resolve an import that does
 		// not exist yet - then upgrade, then lock what that settled on.
-	} else if err := run(dir, r.Generate(artifactParams(c, o.owner, o.parentRepo)), r.Upgrade(), r.Lock()); err != nil {
+	} else if err := run(dir, r.Generate(params), r.Upgrade(), r.Lock(params)); err != nil {
 		err = fmt.Errorf("%w: %w", errDepsUnresolved, err)
 		// Recorded, not just warned about.
 		//

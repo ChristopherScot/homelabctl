@@ -1,5 +1,6 @@
-v1.22.0
+v1.22.1
 
+v1.22.1 init --no-spec skips dependency commands for clients it does not generate
 v1.22.0 homelabctl and new Go CLI/TUI tools update on launch and run the original command on the updated binary
 v1.21.16 generated workloads state imagePullPolicy: IfNotPresent instead of inheriting the tag-based default
 v1.21.15 services generate with oapi-gen v0.1.2, whose Go output is gofmt-clean
