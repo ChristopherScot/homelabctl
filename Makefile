@@ -35,6 +35,7 @@ build:
 # under load is the kind of thing you want to find here instead.
 .PHONY: test
 test:
+	go mod tidy -diff
 	go vet ./...
 	go test -race ./...
 
