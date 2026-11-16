@@ -70,6 +70,8 @@ type embedded struct {
 
 	// lock pins declared dependencies; deterministic, so regen runs it.
 	lock [][]string
+	// specLock resolves dependencies of clients that exist only with a spec.
+	specLock [][]string
 
 	// upgrade moves dependencies forward; init only.
 	upgrade [][]string
@@ -129,7 +131,13 @@ func (e embedded) SpecFiles() []string {
 	return out
 }
 
-func (e embedded) Lock() [][]string    { return e.lock }
+func (e embedded) Lock(p Params) [][]string {
+	cmds := append([][]string(nil), e.lock...)
+	if p.Spec {
+		cmds = append(cmds, e.specLock...)
+	}
+	return cmds
+}
 func (e embedded) Upgrade() [][]string { return e.upgrade }
 
 // swap returns the template to use for src: the specless variant when

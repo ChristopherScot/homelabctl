@@ -23,8 +23,8 @@ func init() {
 		// different JS from the same spec. --package-lock-only because
 		// nothing here needs node_modules on disk; the publish workflow
 		// installs when it builds.
-		lock: [][]string{
-			{"go", "mod", "tidy"},
+		lock: [][]string{{"go", "mod", "tidy"}},
+		specLock: [][]string{
 			{"sh", "-c", "cd '" + TSClientDir + "' && npm install --package-lock-only --no-audit --no-fund"},
 		},
 		// A new service starts on current transitive versions; tidy alone

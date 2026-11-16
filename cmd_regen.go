@@ -195,7 +195,7 @@ func runRegen(cfgPath string, checkOnly bool) error {
 	// what lets CI run this and fail on a diff. Upgrade belongs to
 	// creating a service; running it here would be a red build on any
 	// day a dependency published.
-	if err := run(dir, r.Generate(params), r.Lock()); err != nil {
+	if err := run(dir, r.Generate(params), r.Lock(params)); err != nil {
 		return err
 	}
 
